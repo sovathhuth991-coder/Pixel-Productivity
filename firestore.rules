@@ -1,10 +1,57 @@
 rules_version = '2';
 service cloud.firestore {
-  match /databases/(default)/documents {
-    // Per-user key/value store: /users/{uid}/kv/{key}
-    // One shared account => all devices authenticate as the same uid.
+  match /databases/{database}/documents {
+    // ─── Personal-owner allowlist ──────────────────────────────────────
+    // A signed-in Firebase user is NOT automatically allowed to touch this
+    // project's data. The UID must also have a document under /owners.
+    //
+    // Create it once, by hand, in the Firebase console (console writes bypass
+    // these rules):
+    //   Firestore → Start collection → "owners"
+    //   Document ID: your UID (Settings → Cloud Sync → ACCOUNT ID → COPY)
+    //   Field: enabled = true
+    //
+    // The client never reads /owners; `exists()` is evaluated by the rules
+    // engine. To revoke a device, delete its /owners document.
+    function isOwner(uid) {
+      return request.auth != null
+        && request.auth.uid == uid
+        && exists(/databases/$(database)/documents/owners/$(uid));
+    }
+
+    // Every synced write is a small envelope:
+    //   { value, updatedAt: serverTimestamp(), nonce: uuid }
+    // Old documents already have this shape, so merged writes still pass.
+    function validEnvelope() {
+      return request.resource.data.keys().hasOnly(['value', 'updatedAt', 'nonce'])
+        && request.resource.data.updatedAt is timestamp
+        && request.resource.data.nonce is string
+        && request.resource.data.value != null;
+    }
+
+    match /owners/{uid} {
+      // Admin/console only. The app never needs to read or write this.
+      allow read, write: if false;
+    }
+
     match /users/{uid}/kv/{key} {
-      allow read, write: if request.auth != null && request.auth.uid == uid;
+      allow read: if isOwner(uid);
+
+      allow create, update: if isOwner(uid)
+        && validEnvelope()
+        && key in [
+          'taskmanager_tasks',
+          'taskmanager_streak',
+          'taskmanager_activity',
+          'taskmanager_completion_history',
+          'pixel_report_buffer',
+          'pixel_pomodoro_daily',
+          'pixel_weekly_report_settings',
+          'pixel_bookmarks',
+          'pixel_bookmark_folders'
+        ];
+
+      allow delete: if isOwner(uid);
     }
   }
 }

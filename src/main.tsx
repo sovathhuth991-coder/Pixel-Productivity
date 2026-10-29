@@ -24,6 +24,16 @@ window.addEventListener("vite:preloadError", (event) => {
   window.location.reload();
 });
 
+// Offline support — production only. The worker is cache-first, so in
+// development it would keep serving stale Vite modules and break hot reload.
+if (import.meta.env.PROD && "serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("/sw.js").catch((err) => {
+      console.log("SW registration failed:", err);
+    });
+  });
+}
+
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <ErrorBoundary label="App">
     <SyncProvider>

@@ -13,8 +13,6 @@ import {
   isFirebaseConfigured,
   subscribeAuth,
   signInWithGoogle,
-  signInWithEmail,
-  createAccount,
   signOutUser,
 } from '../services/firebase'
 import { firestoreApi } from '../services/cloud'
@@ -87,8 +85,6 @@ export interface SyncContextValue {
   isSignedIn: boolean
   syncStatus: SyncStatus
   signInGoogle: () => Promise<void>
-  signInEmail: (email: string, password: string) => Promise<void>
-  createAccount: (email: string, password: string) => Promise<void>
   signOut: () => Promise<void>
   /** Sign out **and** forget this browser's synced cache. Cloud data stays. */
   signOutAndClearDevice: () => Promise<void>
@@ -207,18 +203,6 @@ export function SyncProvider({ children }: { children: ReactNode }) {
   const signInGoogle = useCallback(async () => {
     if (!auth) throw new Error('Firebase not configured')
     const u = await signInWithGoogle(auth)
-    setUser(u)
-  }, [auth])
-
-  const signInEmailFn = useCallback(async (email: string, password: string) => {
-    if (!auth) throw new Error('Firebase not configured')
-    const u = await signInWithEmail(auth, email, password)
-    setUser(u)
-  }, [auth])
-
-  const createAccountFn = useCallback(async (email: string, password: string) => {
-    if (!auth) throw new Error('Firebase not configured')
-    const u = await createAccount(auth, email, password)
     setUser(u)
   }, [auth])
 
@@ -466,8 +450,6 @@ export function SyncProvider({ children }: { children: ReactNode }) {
         isSignedIn: !!user,
         syncStatus,
         signInGoogle,
-        signInEmail: signInEmailFn,
-        createAccount: createAccountFn,
         signOut: signOutCb,
         signOutAndClearDevice,
         setStoredValue,

@@ -103,26 +103,6 @@ export async function signInWithGoogle(auth: Auth): Promise<User> {
   return res.user
 }
 
-export async function signInWithEmail(
-  auth: Auth,
-  email: string,
-  password: string,
-): Promise<User> {
-  const { signInWithEmailAndPassword } = await import('firebase/auth')
-  const res = await signInWithEmailAndPassword(auth, email, password)
-  return res.user
-}
-
-export async function createAccount(
-  auth: Auth,
-  email: string,
-  password: string,
-): Promise<User> {
-  const { createUserWithEmailAndPassword } = await import('firebase/auth')
-  const res = await createUserWithEmailAndPassword(auth, email, password)
-  return res.user
-}
-
 export function signOutUser(auth: Auth): Promise<void> {
   return import('firebase/auth').then(({ signOut }) => signOut(auth))
 }

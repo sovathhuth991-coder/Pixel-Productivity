@@ -46,15 +46,18 @@ per-category notes/activity written by the floating category windows.
 - Safe gate: `isFirebaseConfigured()` checks for a real `AIzaSy...` key in
   `VITE_FIREBASE_API_KEY`. With no real config the app runs localStorage-only
   (no sign-in screen).
-- Sign in with Google or email (`src/components/SyncAuthCard.tsx`); an account
-  can also be created from the same card. On the first sign-in, local data
-  that has no cloud document yet is uploaded automatically
-  (`migrateLocalToCloud`), so a browser that was in use before signing in
-  keeps its history. Copy `.env.example` -> `.env`, paste the real key from
-  Firebase console -> Project settings -> web apps, then
-  `npm run build && npx firebase deploy`.
-- Firestore rules: `users/{uid}/kv/{key}` read, write if `request.auth.uid == uid`
-  (see `firestore.rules`).
+- Sign in with **Google only** (`src/components/SyncAuthCard.tsx`). Email/password
+  is not exposed by the UI; disable that provider in the Firebase console too.
+  On the first sign-in, local data that has no cloud document yet is uploaded
+  automatically (`migrateLocalToCloud`), so a browser that was in use before
+  signing in keeps its history. Copy `.env.example` -> `.env`, paste the real
+  key from Firebase console -> Project settings -> web apps, then
+  `npm run build && npm run deploy`.
+- Firestore rules: `users/{uid}/kv/{key}` is readable/writable only by an
+  allowlisted owner. A UID must also have a document at `owners/{uid}`
+  (created by hand in the Firebase console) — see
+  [SECURITY.md](SECURITY.md) for the one-time setup. This is a personal app,
+  not a multi-tenant one.
 - Conflict model: last-write-wins by server `updatedAt`. `useSyncedStorage`
   streams cloud->local via `onSnapshot` and suppresses own writes via a nonce;
   snapshots older than the last applied one are dropped.
@@ -193,6 +196,20 @@ task list.
 
 `Clear all data` removes the synced keys from **both** this browser and
 Firestore, so nothing comes back from the cloud on the next load.
+
+## Security
+This is a personal, Google-only deployment. The short version:
+- The Firestore rules require an `owners/{uid}` document, so a random Firebase
+  account cannot read or write the project even if it can sign in.
+- Bookmark URLs are restricted to `http(s)` at both input and render time.
+- Hosting sends a Content-Security-Policy plus HSTS, frame denial, referrer,
+  permissions and no-index headers ([firebase.json](firebase.json)).
+- Email/password is not offered; keep the provider disabled in Firebase.
+- `firebase` web API keys are public by design; the rules are the access
+  control, not the key.
+
+The one-time console setup and incident checklist are in
+[SECURITY.md](SECURITY.md).
 
 ## Troubleshooting
 See the `pixel-productivity-sync-pwa` skill for sync / PWA-install / stale-data notes.

@@ -6,24 +6,14 @@
     <title>Pixel Productivity - Tasks & Pomodoro</title>
     <meta name="description" content="Retro 8-Bit Daily Task Manager & Pixel Pomodoro Timer" />
     <meta name="theme-color" content="#f6f1e7" />
+    <meta name="robots" content="noindex,nofollow" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
 
     <!-- Apply the saved skin BEFORE the first paint.
          Pixel Center is the default; Commander is opt-in.
-         Without this the app paints Commander navy and then flips. -->
-    <script>
-      (function () {
-        var mode = 'pixel-center';
-        try {
-          if (localStorage.getItem('design-mode') === 'commander') mode = 'commander';
-        } catch (e) {
-          /* storage unavailable — keep the default */
-        }
-        document.documentElement.classList.remove('mode-commander', 'mode-pixel-center');
-        document.documentElement.classList.add('mode-' + mode);
-      })();
-    </script>
+         External (not inline) so the production CSP can block inline script. -->
+    <script src="/theme-boot.js"></script>
 
     <!-- PWA Manifest -->
     <link rel="manifest" href="/manifest.json" />
@@ -45,17 +35,5 @@
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
-    <script type="module">
-      // Register the service worker for offline support — production only.
-      // The worker is cache-first, so in development it would keep serving
-      // stale Vite modules and break hot reload.
-      if (import.meta.env.PROD && 'serviceWorker' in navigator) {
-        window.addEventListener('load', () => {
-          navigator.serviceWorker.register('/sw.js').catch((err) => {
-            console.log('SW registration failed:', err)
-          })
-        })
-      }
-    </script>
   </body>
 </html>

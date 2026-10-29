@@ -6,6 +6,7 @@ node_modules/
 dist/
 .firebase/
 .tmp-build/
+.npm-cache/
 *.tsbuildinfo
 graphify-out/
 

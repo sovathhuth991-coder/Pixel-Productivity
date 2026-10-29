@@ -39,7 +39,6 @@ export default defineConfig({
             id.includes('motion-utils')
           )
             return 'motion'
-          if (id.includes('@dnd-kit')) return 'dnd'
           if (id.includes('react-dom') || id.includes('/react/') || id.includes('scheduler'))
             return 'react'
           return undefined

@@ -3,6 +3,7 @@ import { useSyncContext } from '../context/SyncContext'
 import { useToast } from '../components/ui/Toast'
 import PixelEmoji from '../components/ui/PixelEmoji'
 import ActionButton from './ui/ActionButton'
+import { copyText } from '../utils/download'
 
 export default function SyncAuthCard() {
   const {
@@ -12,18 +13,15 @@ export default function SyncAuthCard() {
     authReady,
     authError,
     signInGoogle,
-    signInEmail,
-    createAccount,
     signOut,
     signOutAndClearDevice,
     migrateLocalToCloud,
+    syncStatus,
   } = useSyncContext()
   const { showToast } = useToast()
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
-  const [isCreate, setIsCreate] = useState(false)
   const [confirmClearDevice, setConfirmClearDevice] = useState(false)
+  const [uidCopied, setUidCopied] = useState(false)
 
   const handleGoogle = async () => {
     setLoading(true)
@@ -37,21 +35,11 @@ export default function SyncAuthCard() {
     }
   }
 
-  const handleEmail = async () => {
-    setLoading(true)
-    try {
-      if (isCreate) {
-        await createAccount(email, password)
-        showToast('Account created ✅ signing in', 'success')
-      } else {
-        await signInEmail(email, password)
-        showToast('Signed in ✅ syncing your tasks', 'success')
-      }
-    } catch (e: any) {
-      showToast(`Sign-in failed: ${e?.message || 'unknown error'}`, 'error')
-    } finally {
-      setLoading(false)
-    }
+  const handleCopyUid = async () => {
+    if (!user) return
+    const ok = await copyText(user.uid)
+    setUidCopied(ok)
+    if (!ok) showToast('Could not copy the account ID.', 'error')
   }
 
   const handleMigrate = async () => {
@@ -136,6 +124,23 @@ export default function SyncAuthCard() {
           Signed in as {user.email || user.uid.slice(0, 8)} • tasks sync live
           across devices
         </p>
+        <div className="border-2 border-line/60 bg-app-deep/50 p-2 space-y-1">
+          <div className="font-pixel text-micro text-dim">
+            ACCOUNT ID — USE THIS AS THE FIRESTORE `owners` DOCUMENT ID
+          </div>
+          <div className="flex items-start gap-2">
+            <code className="font-mono text-micro text-ink break-all flex-1">
+              {user.uid}
+            </code>
+            <button
+              type="button"
+              onClick={() => void handleCopyUid()}
+              className="font-pixel text-micro px-2 py-1 border border-line text-muted hover:text-ink shrink-0"
+            >
+              {uidCopied ? 'COPIED' : 'COPY'}
+            </button>
+          </div>
+        </div>
         <div className="flex flex-wrap gap-2">
           <ActionButton
             onClick={handleMigrate}
@@ -175,6 +180,13 @@ export default function SyncAuthCard() {
             history and the active timer. Sign in again to download them.
           </p>
         )}
+        {syncStatus === 'error' && (
+          <p className="font-pixel text-micro text-danger leading-relaxed">
+            CLOUD WRITE FAILED. CHECK THAT THE FIRESTORE RULES ARE DEPLOYED AND
+            THAT THE owners/{user.uid} DOCUMENT EXISTS. THE APP KEEPS WORKING
+            LOCALLY UNTIL THEN.
+          </p>
+        )}
       </div>
     )
   }
@@ -200,41 +212,10 @@ export default function SyncAuthCard() {
         Continue with Google
       </ActionButton>
 
-      <div className="pt-2 border-t-2 border-line/50">
-        <label className="flex gap-2 items-center font-pixel text-caption text-muted">
-          <input
-            type="checkbox"
-            checked={isCreate}
-            onChange={(e) => setIsCreate(e.target.checked)}
-          />
-          create account instead
-        </label>
-        <div className="flex gap-2 mt-1">
-          <input
-            type="email"
-            placeholder="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            className="w-1/2 bg-app-deep border border-line text-caption font-pixel px-1 py-0.5 text-ink"
-          />
-          <input
-            type="password"
-            placeholder="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            className="w-1/2 bg-app-deep border border-line text-caption font-pixel px-1 py-0.5 text-ink"
-          />
-        </div>
-        <ActionButton
-          onClick={handleEmail}
-          loading={loading}
-          loadingLabel={isCreate ? 'CREATING…' : 'SIGNING IN…'}
-          disabled={!email || !password}
-          className="retro-btn retro-btn-accent font-pixel text-caption px-2 py-1 mt-1"
-        >
-          {isCreate ? 'Create account' : 'Sign in'}
-        </ActionButton>
-      </div>
+      <p className="font-pixel text-micro text-dim leading-relaxed pt-2 border-t-2 border-line/50">
+        ONLY GOOGLE SIGN-IN IS ENABLED FOR THIS APP. EMAIL/PASSWORD IS NOT
+        OFFERED — KEEP THE PROVIDER DISABLED IN THE FIREBASE CONSOLE TOO.
+      </p>
     </div>
   )
 }

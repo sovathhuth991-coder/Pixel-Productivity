@@ -6,6 +6,7 @@ import ActionButton from '../components/ui/ActionButton'
 import { useSyncedStorage } from '../hooks/useSyncedStorage'
 import { useToast } from '../components/ui/Toast'
 import { playClick, playCoin } from '../utils/audio'
+import { normalizeHttpUrl, safeFaviconUrl, safeHttpUrl } from '../utils/url'
 import type { Bookmark, Folder } from '../types/tasks'
 
 // The folder swatches used to be Tailwind-500 hexes (#6366f1, #f59e0b,
@@ -20,10 +21,11 @@ const DEFAULT_FOLDERS: Folder[] = [
   { id: 'reading', name: 'READING', icon: 'bookmark', color: '#9a5b06', tasks: [], description: '' },
 ]
 
+// Fetch the icon from the bookmarked site itself instead of sending every
+// domain to Google's favicon service.
 function getFaviconUrl(url: string): string {
   try {
-    const domain = new URL(url).hostname
-    return `https://www.google.com/s2/favicons?domain=${domain}&sz=64`
+    return `https://${new URL(url).hostname}/favicon.ico`
   } catch {
     return ''
   }
@@ -51,28 +53,12 @@ export default function BookmarksPage() {
   const [newTitle, setNewTitle] = useState('')
   const [newDescription, setNewDescription] = useState('')
   const [selectedFolderId, setSelectedFolderId] = useState<string>('work')
-  const [isScraping, setIsScraping] = useState(false)
   const [newFolderName, setNewFolderName] = useState('')
   const [showAddFolderModal, setShowAddFolderModal] = useState(false)
   const [folderPendingDelete, setFolderPendingDelete] = useState<string | null>(null)
 
   // Real folders (excluding 'all' virtual tab)
   const selectableFolders = folders.filter(f => f.id !== 'all')
-
-  const fetchBookmarkTitle = async (url: string): Promise<string> => {
-    try {
-      const response = await fetch(
-        `https://microlink.io/api?url=${encodeURIComponent(url)}&title=true&image=false&favicon=false`
-      )
-      const data = await response.json()
-      if (data?.title) {
-        return data.title
-      }
-    } catch {
-      // fallback
-    }
-    return getDomain(url)
-  }
 
   const handleOpenAddModal = () => {
     setNewUrl('')
@@ -83,33 +69,22 @@ export default function BookmarksPage() {
     setShowAddModal(true)
   }
 
-  const handleAddBookmark = async (e: React.FormEvent) => {
+  const handleAddBookmark = (e: React.FormEvent) => {
     e.preventDefault()
-    let urlInput = newUrl.trim()
-    if (!urlInput) return
-
-    if (!/^https?:\/\//i.test(urlInput)) {
-      urlInput = 'https://' + urlInput
-    }
-
-    try {
-      new URL(urlInput)
-    } catch {
-      showToast('Please enter a valid URL (e.g. https://github.com)', 'error')
+    const urlInput = normalizeHttpUrl(newUrl)
+    if (!urlInput) {
+      showToast('Please enter a valid http(s) URL (e.g. https://github.com)', 'error')
       return
     }
 
-    let finalTitle = newTitle.trim()
-    if (!finalTitle) {
-      setIsScraping(true)
-      finalTitle = await fetchBookmarkTitle(urlInput)
-      setIsScraping(false)
-    }
+    const finalTitle = newTitle.trim() || getDomain(urlInput)
 
     const newBookmark: Bookmark = {
       id: generateId(),
-      title: finalTitle || getDomain(urlInput),
+      title: finalTitle,
       url: urlInput,
+      // No third-party metadata service: the title comes from you, and the
+      // icon from the bookmarked site itself.
       favicon: getFaviconUrl(urlInput),
       categoryId: selectedFolderId || selectableFolders[0]?.id || 'work',
       description: newDescription.trim(),
@@ -330,7 +305,11 @@ export default function BookmarksPage() {
             </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-              {activeBookmarks.map(bookmark => (
+              {activeBookmarks.map(bookmark => {
+                // Re-check at render time: the value may have arrived from
+                // Firestore or an old backup, not through the add form.
+                const launchUrl = safeHttpUrl(bookmark.url)
+                return (
                 <div
                   key={bookmark.id}
                   className="bg-surface border-4 border-line pixel-border p-3.5 flex flex-col justify-between hover:border-accent-2 transition-all group relative space-y-3"
@@ -340,8 +319,10 @@ export default function BookmarksPage() {
                     <div className="flex items-center gap-2 min-w-0">
                       <div className="w-7 h-7 bg-app-deep border-2 border-line flex items-center justify-center shrink-0 overflow-hidden p-1">
                         <img
-                          src={bookmark.favicon || getFaviconUrl(bookmark.url)}
+                          src={safeFaviconUrl(bookmark.favicon) || getFaviconUrl(bookmark.url)}
                           alt=""
+                          loading="lazy"
+                          referrerPolicy="no-referrer"
                           className="w-full h-full object-contain"
                           onError={(e) => {
                             ;(e.target as HTMLImageElement).style.display = 'none'
@@ -390,16 +371,22 @@ export default function BookmarksPage() {
 
                   {/* Action Buttons */}
                   <div className="pt-2 border-t border-line flex items-center gap-1.5">
-                    <a
-                      href={bookmark.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      onClick={() => playClick()}
-                      className="flex-1 font-pixel text-label py-1.5 px-2 bg-accent/20 hover:bg-accent text-accent hover:text-on-accent border border-accent transition-all text-center flex items-center justify-center gap-1.5"
-                    >
-                      <PixelEmoji name="rocket" size={10} />
-                      <span>LAUNCH</span>
-                    </a>
+                    {launchUrl ? (
+                      <a
+                        href={launchUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={() => playClick()}
+                        className="flex-1 font-pixel text-label py-1.5 px-2 bg-accent/20 hover:bg-accent text-accent hover:text-on-accent border border-accent transition-all text-center flex items-center justify-center gap-1.5"
+                      >
+                        <PixelEmoji name="rocket" size={10} />
+                        <span>LAUNCH</span>
+                      </a>
+                    ) : (
+                      <span className="flex-1 font-pixel text-label py-1.5 px-2 border border-danger text-danger text-center opacity-70">
+                        INVALID URL
+                      </span>
+                    )}
                     <button
                       onClick={() => {
                         playClick()
@@ -413,7 +400,8 @@ export default function BookmarksPage() {
                     </button>
                   </div>
                 </div>
-              ))}
+                )
+              })}
             </div>
           )}
         </div>
@@ -517,8 +505,6 @@ export default function BookmarksPage() {
             </button>
             <ActionButton
               type="submit"
-              loading={isScraping}
-              loadingLabel="SAVING…"
               disabled={!newUrl.trim()}
               className="px-4 py-2 bg-success text-on-accent-2 font-bold border-2 border-success text-caption hover:brightness-110 disabled:opacity-50"
             >

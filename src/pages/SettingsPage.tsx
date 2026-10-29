@@ -11,6 +11,7 @@ import SyncAuthCard from '../components/SyncAuthCard'
 import { useSyncContext, LAST_UID_KEY } from '../context/SyncContext'
 import { SYNC_KEYS } from '../services/syncKeys'
 import { downloadBackup } from '../utils/backup'
+import { sanitizeBookmarks, sanitizeFolders } from '../utils/url'
 
 export default function SettingsPage() {
   const {
@@ -148,10 +149,12 @@ export default function SettingsPage() {
             setStoredValue('taskmanager_completion_history', parsed.completionHistory)
           }
           if (parsed.bookmarks) {
-            setStoredValue('pixel_bookmarks', parsed.bookmarks)
+            // Never restore a javascript:/data: bookmark from a file; the
+            // same allowlist the add form uses is applied here.
+            setStoredValue('pixel_bookmarks', sanitizeBookmarks(parsed.bookmarks))
           }
           if (parsed.bookmarkFolders) {
-            setStoredValue('pixel_bookmark_folders', parsed.bookmarkFolders)
+            setStoredValue('pixel_bookmark_folders', sanitizeFolders(parsed.bookmarkFolders))
           }
           if (parsed.reportBuffer) {
             setStoredValue('pixel_report_buffer', parsed.reportBuffer)
