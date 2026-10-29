@@ -1,0 +1,12 @@
+node_modules/
+.env
+*.log
+
+# Build artifacts & caches
+dist/
+.firebase/
+*.tsbuildinfo
+graphify-out/
+
+# Local safety archives (working-tree snapshots)
+working-tree-backup-*.zip

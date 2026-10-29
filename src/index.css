@@ -1,0 +1,843 @@
+/* Google Fonts are loaded once, from index.html. They used to be loaded
+   twice — once as a <link> in the document and once as an @import here —
+   which duplicated the request and made the stylesheet wait on a
+   render-blocking third-party stylesheet. */
+
+@import "tailwindcss" source(none);
+
+/* Scan only the app source. Without this, Tailwind's automatic source
+   detection also reads the markdown files in the project root — and any
+   utility-looking string inside a document (e.g. `text-[5px]` quoted as
+   evidence in the improvement plan) silently becomes a real CSS rule.
+   The path is relative to this stylesheet, which lives in src/. */
+@source ".";
+
+/* ============================================================
+   THEMES
+
+   Pixel Center (parchment "vintage studio") is the DEFAULT skin.
+   Commander (navy "dark arcade") is opt-in via html.mode-commander.
+
+   :root holds the Pixel Center values so the app renders correctly
+   with no class, no JavaScript, and before the theme class is applied.
+   Every colour below is contrast-checked against the surface it sits on
+   (WCAG AA, 4.5:1 for body text).
+   ============================================================ */
+
+/* Pixel Center — default skin */
+:root {
+  color-scheme: light;
+
+  --app-bg: #f6f1e7;
+  --app-deep: #eae2d0;
+  --surface: #ffffff;
+  --line: #231f32;
+  --ink: #1a1625;
+  --on-dark: #ffffff;
+  /* Section headings. One colour for every sibling section in the app —
+     accent hues are reserved for interactive elements. */
+  --heading: var(--ink);
+  --muted: #5d5670;
+  --dim: #6b6478;
+  --accent: #b53823;
+  --accent-hot: #c9452f;
+  --accent-2: #166b56;
+  --accent-2-hot: #2bb390;
+  --success: #1f7a3d;
+  --warn: #9a5b06;
+  --purple: #7c3aed;
+  --danger: #c81e1e;
+  --on-accent: #ffffff;
+  --on-accent-2: #ffffff;
+  --on-danger: #ffffff;
+  --shadow: 3px 3px 0 var(--line);
+  --pixel-inset: 3px 3px 0 #231f32;
+  --font-ui: 'Press Start 2P', monospace;
+  --font-display: 'Press Start 2P', monospace;
+  /* The body font is the pixel font too. It used to be DM Sans in Pixel
+     Center and Press Start 2P in Commander, so the one paragraph that
+     inherited it (rather than opting in with `font-pixel`) changed
+     typeface and reflowed whenever the theme was toggled — and the
+     app was not the same app in the two skins. */
+  --font-body: 'Press Start 2P', monospace;
+  --font-mono-face: 'VT323', monospace;
+  --grid-line: rgba(35, 31, 50, 0.06);
+  --paper-dot-a: #1f8a70;
+  --paper-dot-b: #e0533c;
+
+  /* Interaction tokens */
+  --hover-fill: #efe7d6;
+  --hover-ink: #1a1625;
+  --input-fill: #ffffff;
+  /* Label colour for sprite-painted buttons (the Kenney sprite is light,
+     so the label must be dark: 15.3:1 on silver, 5.5:1 on orange). */
+  --btn-label: #1a1625;
+}
+
+html.mode-commander {
+  color-scheme: dark;
+
+  --app-bg: #1a1a2e;
+  --app-deep: #0f1a2e;
+  --surface: #16213e;
+  --line: #0f3460;
+  --ink: #ffffff;
+  --on-dark: #ffffff;
+  --heading: var(--ink);
+  --muted: #a0a0b0;
+  --dim: #8f8fa0;
+  --accent: #e94560;
+  --accent-hot: #ff6b81;
+  --accent-2: #4ecdc4;
+  --accent-2-hot: #7bede2;
+  --success: #2ed573;
+  --warn: #f7b731;
+  --purple: #a855f7;
+  --danger: #ff4757;
+  /* Dark label on the saturated coral fill: 4.6:1 (white was only 3.8:1) */
+  --on-accent: #1a1625;
+  --on-accent-2: #111111;
+  --on-danger: #1a1625;
+  --shadow: none;
+  --pixel-inset: inset -2px -2px 0px 0px rgba(0, 0, 0, 0.3), inset 2px 2px 0px 0px rgba(255, 255, 255, 0.1);
+  --font-ui: 'Press Start 2P', cursive;
+  --font-display: 'Press Start 2P', cursive;
+  --font-body: 'Press Start 2P', cursive;
+  --font-mono-face: 'VT323', monospace;
+  --grid-line: transparent;
+  --paper-dot-a: transparent;
+  --paper-dot-b: transparent;
+
+  --hover-fill: #0f3460;
+  --hover-ink: #ffffff;
+  --input-fill: #16213e;
+  --btn-label: #1a1625;
+}
+
+@theme {
+  --font-pixel: var(--font-ui);
+  --font-mono: var(--font-mono-face);
+
+  /* ---------------------------------------------------------------
+     TYPE SCALE
+     One ladder for every piece of text in the app. Before this the
+     stylesheet carried 360 raw `text-[Npx]` declarations across 11
+     sizes — 5px and 6px were the most common, which is below the
+     point where Press Start 2P is readable at all.
+
+     The ladder is deliberately integer-only: a pixel font rasterises
+     cleanly at whole pixels, and `image-rendering: pixelated` is
+     already set globally.
+
+       micro   7px   the smallest chrome (badges, axis labels)
+       label   8px   button and field labels
+       caption 9px   metadata, helper text
+       small  10px   list rows, chips, table cells
+       body   11px   default body copy
+       lead   12px   lead paragraphs, section subtitles
+       title  14px   in-panel headings
+
+     The old `text-[Npx]` values map onto it as a uniform +2px:
+       5→7  6→8  7→9  8→10  9→11  10→12  12→14
+     --------------------------------------------------------------- */
+  --text-micro: 7px;
+  --text-label: 8px;
+  --text-caption: 9px;
+  --text-small: 10px;
+  --text-body: 11px;
+  --text-lead: 12px;
+  --text-title: 14px;
+  --color-app-bg: var(--app-bg);
+  --color-app-deep: var(--app-deep);
+  --color-surface: var(--surface);
+  --color-line: var(--line);
+  --color-ink: var(--ink);
+  --color-heading: var(--heading);
+  --color-muted: var(--muted);
+  --color-dim: var(--dim);
+  --color-accent: var(--accent);
+  --color-accent-hot: var(--accent-hot);
+  --color-accent-2: var(--accent-2);
+  --color-accent-2-hot: var(--accent-2-hot);
+  --color-success: var(--success);
+  --color-warn: var(--warn);
+  --color-purple: var(--purple);
+  --color-danger: var(--danger);
+  --color-on-accent: var(--on-accent);
+  --color-on-accent-2: var(--on-accent-2);
+  --color-on-danger: var(--on-danger);
+  --color-on-dark: var(--on-dark);
+  --color-hover-fill: var(--hover-fill);
+  --color-hover-ink: var(--hover-ink);
+  --color-input-fill: var(--input-fill);
+  --color-btn-label: var(--btn-label);
+}
+
+@layer base {
+  * {
+    box-sizing: border-box;
+    image-rendering: pixelated;
+    image-rendering: -moz-crisp-edges;
+    image-rendering: crisp-edges;
+  }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 100%;
+    background-color: var(--app-bg);
+    color: var(--ink);
+    font-family: var(--font-body);
+    -webkit-font-smoothing: none;
+    -moz-osx-font-smoothing: none;
+  }
+
+  html.mode-pixel-center,
+  html.mode-pixel-center body {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  html.mode-pixel-center body {
+    background-image:
+      linear-gradient(var(--grid-line) 1px, transparent 1px),
+      linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
+    background-size: 24px 24px;
+    background-color: var(--app-bg);
+  }
+}
+
+@layer utilities {
+  .font-pixel {
+    font-family: var(--font-ui);
+  }
+
+  .font-display {
+    font-family: var(--font-display);
+  }
+
+  .font-mono {
+    font-family: var(--font-mono-face);
+  }
+
+  .font-pixel-center {
+    font-family: 'Pixelify Sans', sans-serif;
+  }
+
+  .pixel-border {
+    image-rendering: pixelated;
+    image-rendering: -moz-crisp-edges;
+    image-rendering: crisp-edges;
+    box-shadow: var(--pixel-inset);
+  }
+
+  /* Kenney "Pixel UI pack" (CC0) 9-slice sprite frames — see graphify-out/ */
+  .pixel-frame {
+    border: 16px solid transparent;
+    border-image: url(/pixel-ui/panel-frame.png) 16;
+    image-rendering: pixelated;
+    image-rendering: -moz-crisp-edges;
+    image-rendering: crisp-edges;
+  }
+  .pixel-frame-light {
+    border-image-source: url(/pixel-ui/panel-frame-light.png);
+  }
+  .pixel-frame-red {
+    border-image-source: url(/pixel-ui/panel-frame-red.png);
+  }
+  .pixel-frame img,
+  .pixel-frame svg {
+    image-rendering: pixelated;
+    image-rendering: -moz-crisp-edges;
+    image-rendering: crisp-edges;
+  }
+
+  /* Sprite 9-slice button frames (reuse panel tiles — 8px frame, crisp 2x downscale) */
+  .pixel-btn,
+  .pixel-btn-icon {
+    border: 8px solid transparent;
+    border-image: url(/pixel-ui/panel-frame.png) 16;
+    border-image-width: 8;
+    border-image-repeat: round;
+    image-rendering: pixelated;
+    image-rendering: -moz-crisp-edges;
+    image-rendering: crisp-edges;
+    background: transparent;
+    padding: 0;
+    /* The Kenney sprite is light (#EEEEEE / #E86A17), so the label on top of
+       it must be dark. 15.3:1 on silver, 5.5:1 on orange. */
+    color: var(--btn-label);
+  }
+  .pixel-btn-red {
+    border-image-source: url(/pixel-ui/panel-frame-red.png);
+  }
+  .pixel-btn:hover {
+    opacity: 0.85;
+  }
+  .pixel-btn-icon {
+    width: 40px;
+    height: 40px;
+    padding: 0;
+  }
+  .pixel-btn-icon img {
+    width: 22px;
+    height: 22px;
+    image-rendering: pixelated;
+    image-rendering: -moz-crisp-edges;
+    image-rendering: crisp-edges;
+  }
+
+  /* Sprite close icon: background png + fallback ✕ text */
+  .pixel-close {
+    border: 0;
+    background: #0000;
+    background-image: url(/pixel-ui/close.png);
+    background-size: 18px 18px;
+    background-repeat: no-repeat;
+    background-position: center;
+    width: 24px;
+    height: 24px;
+    padding: 0;
+    font-family: var(--font-ui);
+    /* Fallback glyph for the close sprite (the ✕ only shows if the PNG
+       fails to load) — kept on the type scale. */
+    font-size: 10px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--ink);
+    image-rendering: pixelated;
+    image-rendering: -moz-crisp-edges;
+    image-rendering: crisp-edges;
+    cursor: pointer;
+  }
+  .pixel-close:hover {
+    opacity: 0.85;
+  }
+  .pixel-close:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
+  }
+
+  .pixel-text {
+    text-shadow:
+      2px 2px 0px rgba(0, 0, 0, 0.5),
+      -1px -1px 0px rgba(255, 255, 255, 0.1);
+  }
+
+  .pixel-shadow {
+    text-shadow:
+      3px 3px 0px rgba(0, 0, 0, 0.35),
+      4px 4px 0px color-mix(in srgb, var(--accent) 30%, transparent);
+  }
+
+  html.mode-pixel-center .pixel-shadow {
+    text-shadow: 3px 3px 0 #ded9ec;
+  }
+
+  .animate-bounce-slow {
+    animation: bounce-slow 2s ease-in-out infinite;
+  }
+
+  .animate-twinkle {
+    animation: twinkle 2s ease-in-out infinite alternate;
+  }
+
+  .animate-float-slow {
+    animation: float-slow 8s ease-in-out infinite;
+  }
+
+  /* Pixel Emoji Animations */
+  .pixel-anim-flame {
+    display: inline-flex;
+    animation: pixel-flame-flicker 0.45s ease-in-out infinite;
+    transform-origin: bottom center;
+  }
+  .pixel-anim-spin {
+    display: inline-flex;
+    animation: pixel-spin-step 4s steps(8) infinite;
+    transform-origin: center center;
+  }
+  .pixel-anim-pulse {
+    display: inline-flex;
+    animation: pixel-pop 1.2s ease-in-out infinite;
+    transform-origin: center center;
+  }
+  .pixel-anim-coin {
+    display: inline-flex;
+    animation: pixel-coin-flip 1.8s ease-in-out infinite;
+    transform-origin: center center;
+  }
+  .pixel-anim-bounce {
+    display: inline-flex;
+    animation: pixel-hop 0.7s steps(2) infinite;
+    transform-origin: bottom center;
+  }
+  .pixel-anim-steam {
+    display: inline-flex;
+    animation: pixel-steam 1.6s ease-out infinite;
+    transform-origin: bottom center;
+  }
+  .pixel-anim-ring {
+    display: inline-flex;
+    animation: pixel-ring 1.1s ease-in-out infinite;
+    transform-origin: top center;
+  }
+  .pixel-anim-glint {
+    display: inline-flex;
+    animation: pixel-sparkle 1.8s ease-in-out infinite;
+    transform-origin: center center;
+  }
+  .pixel-anim-wobble {
+    display: inline-flex;
+    animation: pixel-wobble 1.6s ease-in-out infinite;
+    transform-origin: center center;
+  }
+
+  /* Stop Animations Mode: Halts all motion, bouncing, and transitions */
+  html.stop-animations *,
+  html.stop-animations *::before,
+  html.stop-animations *::after {
+    animation: none !important;
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    animation-play-state: paused !important;
+    transition-duration: 0.001ms !important;
+  }
+
+  html.stop-animations [class*="pixel-anim-"],
+  html.stop-animations .animate-bounce-slow,
+  html.stop-animations .animate-spin,
+  html.stop-animations .animate-pulse,
+  html.stop-animations .animate-ping,
+  html.stop-animations .animate-twinkle,
+  html.stop-animations .animate-float-slow {
+    animation: none !important;
+    transform: none !important;
+  }
+}
+
+@keyframes pixel-flame-flicker {
+  0% { transform: scale(1) translateY(0) skewX(0deg); filter: brightness(1); }
+  25% { transform: scale(1.08, 0.95) translateY(-1px) skewX(2deg); filter: brightness(1.2); }
+  50% { transform: scale(0.95, 1.05) translateY(-2px) skewX(-2deg); filter: brightness(1.3); }
+  75% { transform: scale(1.05, 0.98) translateY(-1px) skewX(1deg); filter: brightness(1.15); }
+  100% { transform: scale(1) translateY(0) skewX(0deg); filter: brightness(1); }
+}
+
+@keyframes pixel-spin-step {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@keyframes pixel-pop {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.18); }
+}
+
+@keyframes pixel-coin-flip {
+  0%, 100% { transform: rotateY(0deg) scale(1); }
+  50% { transform: rotateY(180deg) scale(1.1); }
+}
+
+@keyframes pixel-hop {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-3px); }
+}
+
+@keyframes pixel-steam {
+  0% { opacity: 0.3; transform: translateY(2px) scale(0.9); }
+  50% { opacity: 0.9; transform: translateY(-2px) scale(1.05); }
+  100% { opacity: 0; transform: translateY(-5px) scale(1.15); }
+}
+
+@keyframes pixel-ring {
+  0%, 100% { transform: rotate(0deg); }
+  20% { transform: rotate(-14deg); }
+  40% { transform: rotate(14deg); }
+  60% { transform: rotate(-8deg); }
+  80% { transform: rotate(8deg); }
+}
+
+@keyframes pixel-sparkle {
+  0%, 100% { opacity: 0.85; transform: scale(1) rotate(0deg); }
+  50% { opacity: 1; transform: scale(1.2) rotate(45deg); filter: brightness(1.35); }
+}
+
+@keyframes pixel-wobble {
+  0%, 100% { transform: rotate(0deg) scale(1); }
+  25% { transform: rotate(-7deg) scale(1.04); }
+  75% { transform: rotate(7deg) scale(1.04); }
+}
+
+@keyframes bounce-slow {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-6px);
+  }
+}
+
+@keyframes twinkle {
+  0% {
+    opacity: 0.2;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+
+@keyframes float-slow {
+  0%, 100% {
+    transform: translateX(0) translateY(0);
+  }
+  25% {
+    transform: translateX(10px) translateY(-3px);
+  }
+  50% {
+    transform: translateX(20px) translateY(0);
+  }
+  75% {
+    transform: translateX(10px) translateY(3px);
+  }
+}
+
+svg {
+  image-rendering: pixelated;
+  image-rendering: -moz-crisp-edges;
+  image-rendering: crisp-edges;
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--app-bg);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--line);
+  border: 2px solid var(--app-bg);
+}
+
+button {
+  cursor: pointer;
+  /* Chrome is not selectable text — dragging across a toolbar should not
+     paint a highlight over the labels. Everything that is *content*
+     (task titles, stats, report text) stays selectable. */
+  user-select: none;
+  /* Only the properties that actually change on hover/focus. `transition: all`
+     also animates layout properties (width, height, padding), which costs a
+     reflow on every hover and fights the sprite border-image scaling. */
+  transition:
+    background-color 0.1s ease,
+    border-color 0.1s ease,
+    color 0.1s ease,
+    opacity 0.1s ease,
+    filter 0.1s ease,
+    transform 0.1s ease;
+}
+
+button:active {
+  transform: scale(0.95);
+}
+
+/* Keyboard focus.
+   The only focus-visible rule in the app used to be .pixel-close, so every
+   other button and link relied on the UA default ring — inconsistent across
+   the sprite buttons, the dark panels and the parchment surfaces.
+   One ring, everywhere, in the theme's accent colour. */
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+[role='button']:focus-visible,
+[role='tab']:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* Inputs already signal focus with a border swap; keep the ring off them so
+   they don't get two competing focus indicators. */
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: none;
+}
+
+::selection {
+  background-color: var(--accent);
+  color: var(--on-accent);
+}
+
+/* Pixel Center Mode - Vintage 16-Bit Studio Polish */
+html.mode-pixel-center {
+  color-scheme: light;
+}
+
+html.mode-pixel-center body {
+  background-image:
+    linear-gradient(var(--grid-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
+  background-size: 20px 20px;
+}
+
+html.mode-pixel-center .pixel-border {
+  /* The hard pixel shadow comes from the token, so the colour and the
+     offset are defined in exactly one place. */
+  box-shadow: var(--shadow);
+}
+
+html.mode-pixel-center .retro-btn,
+html.mode-pixel-center .retro-btn-accent,
+html.mode-pixel-center .retro-btn-teal {
+  box-shadow: 2px 2px 0 var(--line);
+}
+
+html.mode-pixel-center .retro-btn:active,
+html.mode-pixel-center .retro-btn-accent:active,
+html.mode-pixel-center .retro-btn-teal:active {
+  transform: translate(1px, 1px);
+  box-shadow: 1px 1px 0 var(--line);
+}
+
+html.mode-pixel-center .retro-window-header {
+  background: repeating-linear-gradient(0deg, #eae2d0, #eae2d0 2px, #f6f1e7 2px, #f6f1e7 4px);
+}
+
+html.mode-pixel-center .retro-crt {
+  box-shadow: 4px 4px 0 var(--line);
+}
+
+/* The CRT scanline is a 25% black overlay — on parchment it reads as dirt.
+   Re-tone it to a warm, much lighter band for the studio skin. */
+html.mode-pixel-center .retro-crt::before {
+  background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(120, 100, 80, 0.12) 50%);
+}
+
+/* Sprite frames are near-white (#EEEEEE) — invisible on parchment (1.03:1).
+   Pixel Center already replaces sprite chrome with hard-edged offset boxes
+   (see .pixel-border above), so the frame follows the same idiom: a solid
+   dark 9-slice-free border that reads at 14.2:1 on parchment. */
+html.mode-pixel-center .pixel-frame,
+html.mode-pixel-center .pixel-frame-red,
+html.mode-pixel-center .pixel-frame-light {
+  border: 4px solid var(--line);
+  border-image: none;
+  border-image-width: 0;
+}
+
+html.mode-pixel-center .pixel-btn,
+html.mode-pixel-center .pixel-btn-icon {
+  border: 3px solid var(--line);
+  border-image: none;
+  border-image-width: 0;
+  background: var(--app-deep);
+  color: var(--ink);
+  padding: 0.5rem 1rem;
+  box-shadow: 3px 3px 0 var(--line);
+}
+
+html.mode-pixel-center .pixel-btn-icon {
+  width: 40px;
+  height: 40px;
+  padding: 0;
+}
+
+html.mode-pixel-center .pixel-btn:hover {
+  opacity: 1;
+  background: var(--hover-fill);
+}
+
+html.mode-pixel-center .pixel-btn:active {
+  transform: translate(1px, 1px);
+  box-shadow: 1px 1px 0 var(--line);
+}
+
+/* Inputs: one token so the fill can never flatten a field into its well. */
+html.mode-pixel-center input,
+html.mode-pixel-center select,
+html.mode-pixel-center textarea {
+  background-color: var(--input-fill);
+}
+
+html.mode-commander input,
+html.mode-commander select,
+html.mode-commander textarea {
+  background-color: var(--input-fill);
+  color: var(--ink);
+}
+
+/* Retro Arcade & Tactile Desktop Utilities */
+.retro-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-ui);
+  text-transform: uppercase;
+  border-width: 2px;
+  border-style: solid;
+  border-color: var(--line);
+  background-color: var(--app-deep);
+  color: var(--ink);
+  box-shadow: 2px 2px 0px rgba(0, 0, 0, 0.4);
+  transition:
+    background-color 0.08s ease-in-out,
+    border-color 0.08s ease-in-out,
+    color 0.08s ease-in-out,
+    filter 0.08s ease-in-out,
+    transform 0.08s ease-in-out;
+  cursor: pointer;
+}
+
+.retro-btn:hover {
+  filter: brightness(1.15);
+}
+
+.retro-btn:active {
+  transform: translate(2px, 2px);
+  box-shadow: 0px 0px 0px rgba(0, 0, 0, 0.4);
+}
+
+.retro-btn-accent {
+  background-color: var(--accent);
+  border-color: var(--accent-hot);
+  color: var(--on-accent);
+  box-shadow: 2px 2px 0px rgba(0, 0, 0, 0.4);
+}
+
+.retro-btn-accent:hover {
+  filter: brightness(1.1);
+}
+
+.retro-btn-accent:active {
+  transform: translate(2px, 2px);
+  box-shadow: none;
+}
+
+.retro-btn-teal {
+  background-color: var(--accent-2);
+  border-color: var(--accent-2-hot);
+  color: var(--on-accent-2);
+  font-weight: bold;
+  box-shadow: 2px 2px 0px rgba(0, 0, 0, 0.4);
+}
+
+.retro-btn-teal:hover {
+  filter: brightness(1.1);
+}
+
+.retro-btn-teal:active {
+  transform: translate(2px, 2px);
+  box-shadow: none;
+}
+
+/* Pixel spinner — the pending indicator for in-flight mutations.
+   Two squares pulse on the diagonal; the colour is inherited from the
+   button's own text colour so it works on every button skin. */
+.pixel-spinner {
+  display: inline-block;
+  position: relative;
+  width: 12px;
+  height: 12px;
+  vertical-align: -2px;
+  flex-shrink: 0;
+}
+
+.pixel-spinner::before,
+.pixel-spinner::after {
+  content: "";
+  position: absolute;
+  width: 5px;
+  height: 5px;
+  background-color: currentColor;
+  animation: pixel-spinner-bounce 0.9s infinite ease-in-out;
+}
+
+.pixel-spinner::before {
+  left: 0;
+  top: 0;
+}
+
+.pixel-spinner::after {
+  right: 0;
+  bottom: 0;
+  animation-delay: 0.45s;
+}
+
+@keyframes pixel-spinner-bounce {
+  0%,
+  100% {
+    opacity: 0.25;
+    transform: scale(0.7);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pixel-spinner::before,
+  .pixel-spinner::after {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* Scanline Overlay for Arcade CRT screens */
+.retro-crt {
+  position: relative;
+  overflow: hidden;
+}
+
+.retro-crt::before {
+  content: " ";
+  display: block;
+  position: absolute;
+  top: 0; left: 0; bottom: 0; right: 0;
+  background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%);
+  background-size: 100% 4px;
+  z-index: 5;
+  pointer-events: none;
+  opacity: 0.6;
+}
+
+/* Retro Window Titlebar */
+.retro-window-header {
+  background: linear-gradient(90deg, var(--surface) 0%, var(--app-deep) 100%);
+  border-bottom: 2px solid var(--line);
+}
+
+/* Retro Snap Carousel Track */
+.retro-snap-carousel {
+  scroll-snap-type: x mandatory;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+  scrollbar-color: var(--line) var(--app-deep);
+}
+
+.retro-snap-carousel::-webkit-scrollbar {
+  height: 8px;
+}
+
+.retro-snap-carousel::-webkit-scrollbar-track {
+  background: var(--app-deep);
+  border: 1px solid var(--line);
+}
+
+.retro-snap-carousel::-webkit-scrollbar-thumb {
+  background: var(--line);
+  border: 1px solid var(--accent-2);
+}
+
+.retro-snap-carousel::-webkit-scrollbar-thumb:hover {
+  background: var(--accent-2);
+}
+

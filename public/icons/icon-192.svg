@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="192" height="192" viewBox="0 0 192 192">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#16213e"/>
+      <stop offset="100%" style="stop-color:#0f3460"/>
+    </linearGradient>
+  </defs>
+  <rect width="192" height="192" rx="32" fill="url(#bgGrad)"/>
+  <!-- Pixel Tomato / Game Icon -->
+  <g transform="translate(48, 44)">
+    <!-- Tomato stem -->
+    <rect x="42" y="6" width="12" height="18" fill="#2ed573" stroke="#10ac84" stroke-width="2"/>
+    <rect x="30" y="16" width="36" height="8" fill="#2ed573"/>
+    <!-- Tomato body -->
+    <rect x="12" y="24" width="72" height="66" rx="16" fill="#e94560" stroke="#c0392b" stroke-width="4"/>
+    <!-- Pixel highlights -->
+    <rect x="22" y="34" width="12" height="12" fill="#ff6b81"/>
+    <!-- Pixel face -->
+    <rect x="28" y="52" width="8" height="8" fill="#ffffff"/>
+    <rect x="30" y="54" width="4" height="4" fill="#1a1a2e"/>
+    <rect x="60" y="52" width="8" height="8" fill="#ffffff"/>
+    <rect x="62" y="54" width="4" height="4" fill="#1a1a2e"/>
+    <rect x="42" y="68" width="12" height="4" fill="#ffffff"/>
+  </g>
+</svg>

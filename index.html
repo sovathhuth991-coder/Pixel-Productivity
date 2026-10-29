@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en" class="mode-pixel-center">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Pixel Productivity - Tasks & Pomodoro</title>
+    <meta name="description" content="Retro 8-Bit Daily Task Manager & Pixel Pomodoro Timer" />
+    <meta name="theme-color" content="#f6f1e7" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+
+    <!-- Apply the saved skin BEFORE the first paint.
+         Pixel Center is the default; Commander is opt-in.
+         Without this the app paints Commander navy and then flips. -->
+    <script>
+      (function () {
+        var mode = 'pixel-center';
+        try {
+          if (localStorage.getItem('design-mode') === 'commander') mode = 'commander';
+        } catch (e) {
+          /* storage unavailable — keep the default */
+        }
+        document.documentElement.classList.remove('mode-commander', 'mode-pixel-center');
+        document.documentElement.classList.add('mode-' + mode);
+      })();
+    </script>
+
+    <!-- PWA Manifest -->
+    <link rel="manifest" href="/manifest.json" />
+    
+    <!-- Icons -->
+    <link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png" />
+    <link rel="icon" type="image/png" sizes="512x512" href="/icons/icon-512.png" />
+    <!-- iOS Home-Screen icon (iPhone prefers 180x180) -->
+    <link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon.png" />
+    
+    <!-- Google Fonts - Pixel native typefaces.
+         Loaded here only. DM Sans was dropped: every piece of text in the
+         app now resolves to the pixel font, so the family was a wasted
+         render-blocking download. -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&family=Pixelify+Sans:wght@400;600;700&display=swap" rel="stylesheet">
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+    <script type="module">
+      // Register the service worker for offline support — production only.
+      // The worker is cache-first, so in development it would keep serving
+      // stale Vite modules and break hot reload.
+      if (import.meta.env.PROD && 'serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('/sw.js').catch((err) => {
+            console.log('SW registration failed:', err)
+          })
+        })
+      }
+    </script>
+  </body>
+</html>
