@@ -22,23 +22,25 @@ The rules in `firestore.rules` require **both** a matching Firebase UID and a
 document at `owners/{uid}`. A random Google account that signs in cannot read
 or write your data.
 
-1. Deploy the current rules:
+1. Find your UID in the Firebase console → **Authentication → Users** (copy
+   the User UID). If the new Settings screen is already deployed, the same ID
+   is shown under **Settings → Cloud Sync → ACCOUNT ID**.
 
-   ```bash
-   npm run deploy
-   ```
-
-2. Open the app, sign in with Google, go to **Settings → Cloud Sync**, and copy
-   the **ACCOUNT ID** shown under your email.
-
-3. In the Firebase console → **Firestore Database** → **Start collection**:
+2. In the Firebase console → **Firestore Database** → **Start collection**:
    - Collection ID: `owners`
    - Document ID: paste your UID
    - Field: `enabled` (boolean) = `true`
    - Save.
 
-4. Reload the app and confirm sync works. If you skip step 3, every Firestore
-   read/write is denied — the app still works locally, but nothing syncs.
+3. Deploy hosting + rules:
+
+   ```bash
+   npm run deploy
+   ```
+
+4. Reload the app and confirm sync works. Create the owner document **before**
+   deploying the rules, or Firestore will deny reads/writes until it exists —
+   the app still works locally, but nothing syncs.
 
 To revoke a device/account later, delete its `owners/{uid}` document. To add a
 trusted second account, create a matching document for its UID.
