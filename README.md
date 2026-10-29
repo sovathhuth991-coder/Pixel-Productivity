@@ -11,12 +11,16 @@ Pixel-art Pomodoro timer + daily task manager + Kanban + bookmarks, built with R
 npm install
 npm run dev
 npm run build        # production build
-npx firebase deploy
+npm run deploy       # hosting + Firestore rules
 ```
-Deploy (hosting + Firestore rules):
-```bash
-npx firebase deploy --only hosting,firestore
-```
+`firebase-tools` is a local devDependency, so `firebase` is **not** a global
+command. `npm run deploy` works because npm puts `node_modules/.bin` on PATH
+for the script; a bare `firebase deploy` in a normal shell will not, unless you
+also install the CLI globally (`npm install -g firebase-tools`). The equivalent
+one-off is `npx firebase-tools deploy --only hosting,firestore` (`npx firebase`
+resolves the wrong package name).
+
+The CLI needs a login once per machine: `npx firebase-tools login`.
 
 ## Cloud sync (opt-in, non-breaking)
 A per-user key/value store in Firestore at `users/{uid}/kv/{key}`. The keys that
