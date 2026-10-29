@@ -4,6 +4,7 @@ import {
   generateWeeklyReport,
   getLastWeekDates,
   getReportSettings,
+  getSaveWindowStart,
   isReportSaved,
   isWeeklySaveWindowOpen,
   markReportSaved,
@@ -106,6 +107,23 @@ async function tryAutoSave(weekDates: Date[]): Promise<void> {
   }
 }
 
+// If the app was closed when the save window opened, the scheduler starts
+// after the window and would wait a whole week. Run the auto-save once on
+// mount for a window that has already passed.
+let catchUpChecked = false
+async function catchUpAutoSave(): Promise<void> {
+  if (catchUpChecked) return
+  catchUpChecked = true
+  const settings = getReportSettings()
+  if (!settings.autoSave) return
+  if (isWeeklySaveWindowOpen()) return // refresh() already handles an open window
+  const lastWeek = getLastWeekDates()
+  if (isReportSaved(lastWeek)) return
+  if (Date.now() < getSaveWindowStart(lastWeek, settings).getTime()) return
+  if (readWeekBuffer(lastWeek).length === 0) return
+  await tryAutoSave(lastWeek)
+}
+
 function refresh(now: Date) {
   windowOpen = isWeeklySaveWindowOpen(now)
   if (!windowOpen) {
@@ -174,6 +192,7 @@ export function useWeeklyReportReminder(): WeeklyReminderState {
   useEffect(() => {
     listeners.add(setState)
     granted = isNotificationGranted()
+    void catchUpAutoSave()
     schedule()
     emit()
     return () => {

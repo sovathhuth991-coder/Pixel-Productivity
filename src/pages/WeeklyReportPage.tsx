@@ -33,6 +33,11 @@ import {
   requestNotificationPermission,
   sendBrowserNotification,
 } from '../utils/notifications'
+import {
+  copyText,
+  downloadTextFile,
+  supportsFileSystemAccess,
+} from '../utils/download'
 
 const DAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 
@@ -45,6 +50,8 @@ export default function WeeklyReportPage() {
   const [pickingFolder, setPickingFolder] = useState(false)
   const [notifGranted, setNotifGranted] = useState<boolean>(() => isNotificationGranted())
   const [tick, setTick] = useState(0) // forces re-read of buffer
+  const [selectedPastIndex, setSelectedPastIndex] = useState(0)
+  const fsaSupported = supportsFileSystemAccess()
 
   // Tick once a minute so the "saves in X min" countdown updates.
   useEffect(() => {
@@ -78,10 +85,40 @@ export default function WeeklyReportPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [weekDates, tick],
   )
-  const lastWeekEntries: ReportEntry[] = useMemo(
-    () => readWeekBuffer(lastWeekDates),
-    [lastWeekDates, tick],
-  )
+  // Every recent week that still has buffered events. Twelve weeks is well
+  // inside the 16-week retention window, so a report missed on Sunday — or
+  // for several weeks — can still be produced from this screen.
+  const pastWeeks = useMemo(() => {
+    const fmt = (d: Date) =>
+      d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+    const list: { label: string; dates: Date[]; entries: ReportEntry[]; saved: boolean }[] = []
+    for (let offset = 1; offset <= 12; offset++) {
+      const anchor = new Date(now.getFullYear(), now.getMonth(), now.getDate() - offset * 7)
+      const dates = getWeekDates(anchor)
+      const entries = readWeekBuffer(dates)
+      if (entries.length === 0) continue
+      list.push({
+        label: `${fmt(dates[0])} – ${fmt(dates[6])}`,
+        dates,
+        entries,
+        saved: isReportSaved(dates),
+      })
+    }
+    if (list.length === 0) {
+      list.push({
+        label: 'No buffered weeks',
+        dates: lastWeekDates,
+        entries: [],
+        saved: isReportSaved(lastWeekDates),
+      })
+    }
+    return list
+    // tick re-reads the buffer; now rolls the window forward.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [now, tick, lastWeekDates])
+
+  const selectedPast = pastWeeks[Math.min(selectedPastIndex, pastWeeks.length - 1)]
+  const selectedPastEntries = selectedPast.entries
 
   const saveWindowOpen = useMemo(() => isWeeklySaveWindowOpen(now), [now, settings])
 
@@ -97,6 +134,10 @@ export default function WeeklyReportPage() {
   // ─── Folder handlers ────────────────────────────────────────────────
   const handlePickFolder = useCallback(async () => {
     playClick()
+    if (!fsaSupported) {
+      showToast('Folder saving is not supported in this browser. Use DOWNLOAD .MD.', 'error')
+      return
+    }
     setPickingFolder(true)
     try {
       const h = await pickVaultFolder()
@@ -109,7 +150,7 @@ export default function WeeklyReportPage() {
     } finally {
       setPickingFolder(false)
     }
-  }, [showToast])
+  }, [showToast, fsaSupported])
 
   const handleForgetFolder = useCallback(async () => {
     playClick()
@@ -154,6 +195,36 @@ export default function WeeklyReportPage() {
     showToast('Test notification sent.', 'success')
   }, [showToast, settings.weeklySaveDay, settings.weeklySaveTime])
 
+  // ─── Export handlers (work on every browser) ────────────────────────
+  const handleDownload = useCallback(
+    (dates: Date[], entries: ReportEntry[], label: string) => {
+      if (entries.length === 0) {
+        showToast('No activity in this week yet.', 'info')
+        return
+      }
+      const fname = reportFilename(dates[6])
+      downloadTextFile(fname, generateWeeklyReport(dates))
+      playCoin()
+      showToast(`Downloaded ${fname} (${label})`, 'success')
+    },
+    [showToast],
+  )
+
+  const handleCopy = useCallback(
+    async (dates: Date[], entries: ReportEntry[]) => {
+      if (entries.length === 0) {
+        showToast('No activity in this week yet.', 'info')
+        return
+      }
+      const ok = await copyText(generateWeeklyReport(dates))
+      showToast(
+        ok ? 'Weekly report copied as Markdown.' : 'Copy failed — use DOWNLOAD .MD.',
+        ok ? 'success' : 'error',
+      )
+    },
+    [showToast],
+  )
+
   // ─── Save handlers ──────────────────────────────────────────────────
   const handleSaveCurrentWeek = useCallback(async () => {
     playClick()
@@ -163,6 +234,12 @@ export default function WeeklyReportPage() {
     }
     if (currentWeekEntries.length === 0) {
       showToast('No activity in this week yet.', 'info')
+      return
+    }
+    // Safari/Firefox have no File System Access API. The download path is
+    // the same report, just delivered as a file instead of into the vault.
+    if (!fsaSupported) {
+      handleDownload(weekDates, currentWeekEntries, 'current week')
       return
     }
     setSaving(true)
@@ -194,12 +271,16 @@ export default function WeeklyReportPage() {
     } finally {
       setSaving(false)
     }
-  }, [saveWindowOpen, currentWeekEntries, weekDates, showToast])
+  }, [saveWindowOpen, currentWeekEntries, weekDates, showToast, fsaSupported, handleDownload])
 
-  const handleSaveLastWeek = useCallback(async () => {
+  const handleSavePastWeek = useCallback(async () => {
     playClick()
-    if (lastWeekEntries.length === 0) {
-      showToast('No buffered activity for last week.', 'info')
+    if (selectedPastEntries.length === 0) {
+      showToast('No buffered activity for that week.', 'info')
+      return
+    }
+    if (!fsaSupported) {
+      handleDownload(selectedPast.dates, selectedPastEntries, selectedPast.label)
       return
     }
     setSaving(true)
@@ -213,13 +294,13 @@ export default function WeeklyReportPage() {
         }
         setHasFolder(true)
       }
-      const md = generateWeeklyReport(lastWeekDates)
-      const fname = reportFilename(lastWeekDates[6])
+      const md = generateWeeklyReport(selectedPast.dates)
+      const fname = reportFilename(selectedPast.dates[6])
       const res = await writeMarkdownToVault(fname, md)
       if (res.ok) {
         playCoin()
-        markReportSaved(lastWeekDates)
-        showToast(`Wrote ${fname} (last week) to ${folder.name}`, 'success')
+        markReportSaved(selectedPast.dates)
+        showToast(`Wrote ${fname} (${selectedPast.label}) to ${folder.name}`, 'success')
       } else {
         showToast(`Save failed: ${res.error}`, 'error')
       }
@@ -228,7 +309,7 @@ export default function WeeklyReportPage() {
     } finally {
       setSaving(false)
     }
-  }, [lastWeekEntries, lastWeekDates, showToast])
+  }, [selectedPast, selectedPastEntries, fsaSupported, handleDownload, showToast])
 
   // ─── Render helpers ─────────────────────────────────────────────────
   const renderEntry = (e: ReportEntry) => {
@@ -416,34 +497,42 @@ export default function WeeklyReportPage() {
           Pick the folder once. Permission is remembered for future saves —
           no re-prompting each week.
         </p>
-        <div className="flex items-center gap-2 flex-wrap">
-          <ActionButton
-            onClick={handlePickFolder}
-            loading={pickingFolder}
-            loadingLabel="PICKING…"
-            className="retro-btn-accent font-pixel text-small px-3.5 py-2.5 flex items-center gap-1.5"
-          >
-            <PixelIcon name="folder" size={14} />
-            <span>{hasFolder ? 'CHANGE FOLDER' : 'PICK VAULT FOLDER'}</span>
-          </ActionButton>
-          {hasFolder && (
-            <button
-              onClick={handleForgetFolder}
-              className="font-pixel text-label px-3 py-2 border border-line text-muted hover:text-ink"
+        {fsaSupported ? (
+          <div className="flex items-center gap-2 flex-wrap">
+            <ActionButton
+              onClick={handlePickFolder}
+              loading={pickingFolder}
+              loadingLabel="PICKING…"
+              className="retro-btn-accent font-pixel text-small px-3.5 py-2.5 flex items-center gap-1.5"
             >
-              FORGET FOLDER
-            </button>
-          )}
-          <span
-            className={`font-pixel text-label px-2 py-1 border ${
-              hasFolder
-                ? 'border-accent-2 text-accent-2 bg-accent-2/10'
-                : 'border-warn text-warn bg-warn/10'
-            }`}
-          >
-            {hasFolder ? '✓ READY' : '⚠ NOT SET'}
-          </span>
-        </div>
+              <PixelIcon name="folder" size={14} />
+              <span>{hasFolder ? 'CHANGE FOLDER' : 'PICK VAULT FOLDER'}</span>
+            </ActionButton>
+            {hasFolder && (
+              <button
+                onClick={handleForgetFolder}
+                className="font-pixel text-label px-3 py-2 border border-line text-muted hover:text-ink"
+              >
+                FORGET FOLDER
+              </button>
+            )}
+            <span
+              className={`font-pixel text-label px-2 py-1 border ${
+                hasFolder
+                  ? 'border-accent-2 text-accent-2 bg-accent-2/10'
+                  : 'border-warn text-warn bg-warn/10'
+              }`}
+            >
+              {hasFolder ? '✓ READY' : '⚠ NOT SET'}
+            </span>
+          </div>
+        ) : (
+          <p className="font-pixel text-label text-warn leading-relaxed">
+            This browser cannot write directly into a folder (File System
+            Access is Chromium-only). Use DOWNLOAD .MD below — on iPhone, the
+            file opens in Files, where you can move it into your vault.
+          </p>
+        )}
       </div>
 
       {/* Save Buttons */}
@@ -465,39 +554,100 @@ export default function WeeklyReportPage() {
             <div className="font-pixel text-label text-muted">
               Sun {weekDates[0].toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} – Sat {weekDates[6].toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
             </div>
-            <ActionButton
-              onClick={handleSaveCurrentWeek}
-              loading={saving}
-              loadingLabel="SAVING…"
-              disabled={!saveWindowOpen || !hasFolder || currentWeekEntries.length === 0}
-              className="w-full pixel-btn pixel-btn-red font-pixel text-small py-2.5 disabled:opacity-40 disabled:cursor-not-allowed"
-            >
-              {!saveWindowOpen ? '🔒 LOCKED' : !hasFolder ? '⚠ PICK FOLDER' : `SAVE ${reportFilename(now)}`}
-            </ActionButton>
+            {fsaSupported ? (
+              <ActionButton
+                onClick={handleSaveCurrentWeek}
+                loading={saving}
+                loadingLabel="SAVING…"
+                disabled={!saveWindowOpen || !hasFolder || currentWeekEntries.length === 0}
+                className="w-full pixel-btn pixel-btn-red font-pixel text-small py-2.5 disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                {!saveWindowOpen ? '🔒 LOCKED' : !hasFolder ? '⚠ PICK FOLDER' : `SAVE ${reportFilename(now)}`}
+              </ActionButton>
+            ) : (
+              <p className="font-pixel text-micro text-warn leading-relaxed">
+                Direct folder saving needs Chrome or Edge. Use DOWNLOAD .MD —
+                it is the same report.
+              </p>
+            )}
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => handleDownload(weekDates, currentWeekEntries, 'current week')}
+                disabled={currentWeekEntries.length === 0}
+                className="font-pixel text-label px-2 py-1 border border-line text-muted hover:text-ink disabled:opacity-40"
+              >
+                DOWNLOAD .MD
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleCopy(weekDates, currentWeekEntries)}
+                disabled={currentWeekEntries.length === 0}
+                className="font-pixel text-label px-2 py-1 border border-line text-muted hover:text-ink disabled:opacity-40"
+              >
+                COPY
+              </button>
+            </div>
           </div>
 
-          {/* Last Week */}
+          {/* Past Week */}
           <div className="border-2 border-line p-3 space-y-2 bg-app-deep/60">
             <div className="flex items-center justify-between">
-              <span className="font-pixel text-small text-accent-2">LAST WEEK</span>
+              <span className="font-pixel text-small text-accent-2">PAST WEEK</span>
               <span className="font-pixel text-label text-dim">
-                {lastWeekEntries.length} event{lastWeekEntries.length === 1 ? '' : 's'}
+                {selectedPastEntries.length} event{selectedPastEntries.length === 1 ? '' : 's'}
               </span>
             </div>
-            <div className="font-pixel text-label text-muted">
-              Sun {lastWeekDates[0].toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} – Sat {lastWeekDates[6].toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-            </div>
-            <ActionButton
-              onClick={handleSaveLastWeek}
-              loading={saving}
-              loadingLabel="SAVING…"
-              disabled={!hasFolder || lastWeekEntries.length === 0}
-              className="w-full pixel-btn font-pixel text-small py-2.5 disabled:opacity-40 disabled:cursor-not-allowed"
+            <label htmlFor="past-week-select" className="sr-only">
+              Choose a past week
+            </label>
+            <select
+              id="past-week-select"
+              value={Math.min(selectedPastIndex, pastWeeks.length - 1)}
+              onChange={e => setSelectedPastIndex(Number(e.target.value))}
+              className="w-full bg-app-deep border-2 border-line focus:border-accent px-2 py-1.5 font-pixel text-caption text-ink outline-none"
             >
-              {!hasFolder ? '⚠ PICK FOLDER' : `SAVE ${reportFilename(lastWeekDates[6])}`}
-            </ActionButton>
+              {pastWeeks.map((w, i) => (
+                <option key={`${w.label}-${i}`} value={i}>
+                  {w.saved ? '✓ ' : ''}{w.label}
+                </option>
+              ))}
+            </select>
+            {fsaSupported ? (
+              <ActionButton
+                onClick={handleSavePastWeek}
+                loading={saving}
+                loadingLabel="SAVING…"
+                disabled={!hasFolder || selectedPastEntries.length === 0}
+                className="w-full pixel-btn font-pixel text-small py-2.5 disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                {!hasFolder ? '⚠ PICK FOLDER' : `SAVE ${reportFilename(selectedPast.dates[6])}`}
+              </ActionButton>
+            ) : (
+              <p className="font-pixel text-micro text-warn leading-relaxed">
+                Direct folder saving needs Chrome or Edge. Use DOWNLOAD .MD.
+              </p>
+            )}
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => handleDownload(selectedPast.dates, selectedPastEntries, selectedPast.label)}
+                disabled={selectedPastEntries.length === 0}
+                className="font-pixel text-label px-2 py-1 border border-line text-muted hover:text-ink disabled:opacity-40"
+              >
+                DOWNLOAD .MD
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleCopy(selectedPast.dates, selectedPastEntries)}
+                disabled={selectedPastEntries.length === 0}
+                className="font-pixel text-label px-2 py-1 border border-line text-muted hover:text-ink disabled:opacity-40"
+              >
+                COPY
+              </button>
+            </div>
             <div className="font-pixel text-micro text-dim">
-              Re-saves the previous week from buffered history (always available).
+              Any of the last 12 buffered weeks — a missed Sunday is recoverable.
             </div>
           </div>
         </div>

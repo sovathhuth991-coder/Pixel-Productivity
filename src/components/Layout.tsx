@@ -5,6 +5,7 @@ import { usePomodoroContext } from '../context/PomodoroContext'
 import PixelIcon, { type PixelIconName } from './ui/PixelIcon'
 import MobileMoreSheet from './MobileMoreSheet'
 import KeyboardShortcutsModal from './ui/KeyboardShortcutsModal'
+import ErrorBoundary from './ErrorBoundary'
 import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts'
 import { playClick } from '../utils/audio'
 
@@ -55,7 +56,11 @@ export default function Layout() {
           the overflow instead of letting the page scroll. */}
       <div className="flex-1 min-w-0 flex flex-col h-full overflow-hidden relative">
         <main className="flex-1 min-w-0 overflow-y-auto overflow-x-hidden pb-16 md:pb-0">
-          <Outlet />
+          {/* Page-level boundary, keyed by route so navigating away from a
+              crashed screen resets it. The shell (nav, timer) stays usable. */}
+          <ErrorBoundary key={location.pathname} label={location.pathname}>
+            <Outlet />
+          </ErrorBoundary>
         </main>
 
         {/* Mobile Bottom Navigation — 4 primary destinations + MORE */}

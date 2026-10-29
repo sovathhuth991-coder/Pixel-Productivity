@@ -61,6 +61,19 @@ per-category notes/activity written by the floating category windows.
   before signing in keeps it, instead of adopting a document another device
   created first.
 
+### Account switching on a shared browser
+The synced keys are device-global, so the app remembers which account owns the
+local cache in `pixel_last_uid`. Signing in with a **different** account clears
+this browser's cache and reloads before any hook can read it — the new account
+starts from its own cloud documents instead of inheriting the previous user's
+tasks. The first-ever sign-in (no marker yet) still migrates local guest data,
+as before.
+
+`Sign out & clear device` in Settings removes the local cache without deleting
+the cloud copy; signing in again downloads it. The app shell is held behind a
+short "CHECKING ACCOUNT…" gate until Firebase resolves the session, with a
+five-second timeout so a dead network cannot trap the app.
+
 ### iOS notes
 - Install from Safari only (Brave/Chrome iOS can't add to Home Screen).
 - A PWA only receives Firestore pushes while in the **foreground**; a backgrounded
@@ -68,10 +81,18 @@ per-category notes/activity written by the floating category windows.
 
 ## Weekly report
 - Save window: Sunday 22:00 -> Monday 00:00 by default (`weeklySaveDay` /
-  `weeklySaveTime` in Settings -> Weekly Report). The save button is **locked**
-  until the window opens. Filenames: `DD.MM.YYYY.md`, Sunday-start week.
+  `weeklySaveTime` in Settings -> Weekly Report). The **current week's** save
+  button is locked until the window opens. Filenames: `DD.MM.YYYY.md`,
+  Sunday-start week.
 - Reminder: a browser notification fires when the save window opens and last
   week's report hasn't been saved; an in-app banner shows while the window is open.
+  If the app was closed when the window opened and auto-save is on, the next
+  launch catches up on that missed save.
+- **Past weeks are selectable** (last 12 weeks with buffered events), so a
+  missed Sunday — or several — can still be archived from the buffer.
+- Every report card has **DOWNLOAD .MD** and **COPY** buttons. The File System
+  Access API is Chromium-only, so Safari/iOS/Firefox use the download instead
+  of writing into the vault directly.
 - The **event buffer** behind the report is synced (`pixel_report_buffer`), so
   the `.md` can be produced from any signed-in device. The **file itself** is
   written locally via the File System Access API to the Obsidian vault folder
@@ -88,6 +109,27 @@ Tasks reset on a **Sunday-start** week (aligned with the weekly report), not ISO
 - `frequency === 'weekly'` tasks reset each new Sunday.
 Reset runs on app open, every 60s, and on tab focus/visibility change so a week
 boundary crossed while the app was backgrounded is caught on return.
+
+## Focus timer
+The active interval survives a reload, a phone locking, or iOS evicting the
+PWA. `pixel_pomodoro_session` stores the mode, the wall-clock end time, the
+paused remainder, the active task and the session counts. On launch the
+remaining time is recomputed from the end time; an interval that finished
+while the app was closed completes exactly once (it increments the pomodoro
+count and moves to the next break/work mode). Pausing no longer resets the
+countdown — it freezes the exact remaining time.
+
+## Resilience & performance
+- **Lazy Firebase.** The SDK is no longer in the shell chunk: `loadFirebase()`
+  dynamically imports `firebase/app`, `firebase/auth` and `firebase/firestore`
+  only when a real `VITE_FIREBASE_API_KEY` exists and a signed-in session is
+  needed. Local-only first paint ships no Firebase at all.
+- **Error boundary.** A crashed page keeps the shell and offers reload, backup
+  export and a local-cache reset instead of a blank screen. A stale lazy chunk
+  after a deploy (`vite:preloadError`) triggers one reload.
+- **One backup format.** Settings export and the crash fallback both call
+  `src/utils/backup.ts`, so an emergency backup contains the same keys as a
+  normal one.
 
 ## Statistics (`/stats`)
 The Stats hub shows productivity trends in 8-bit pixel-styled Recharts views. Add a

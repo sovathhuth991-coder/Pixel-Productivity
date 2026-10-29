@@ -11,7 +11,8 @@
 // be silently clobbered by a stale local client state.
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { doc, getDoc, onSnapshot, type Firestore } from 'firebase/firestore'
+import type { Firestore } from 'firebase/firestore'
+import { firestoreApi } from '../services/cloud'
 import { useSyncContext } from '../context/SyncContext'
 
 type Setter<T> = (value: T | ((prev: T) => T)) => void
@@ -79,8 +80,15 @@ export function useSyncedStorage<T>(
   mergeRef.current = mergeOnFirstContact
 
   useEffect(() => {
-    if (!enabled) return
-    const ref = doc(db as Firestore, 'users', user!.uid, 'kv', key)
+    if (!enabled || !db || !user) return
+    let cancelled = false
+    let unsub: (() => void) | null = null
+
+    void (async () => {
+      // The SDK is fetched on demand; every hook shares the same promise.
+      const { doc, getDoc, onSnapshot } = await firestoreApi()
+      if (cancelled) return
+      const ref = doc(db as Firestore, 'users', user.uid, 'kv', key)
 
     // A different account brings its own documents, its own timestamps and
     // its own history. Anything remembered about the previous account would
@@ -102,6 +110,7 @@ export function useSyncedStorage<T>(
     // creating a document that then shadows the real task list of the
     // device that actually has one.
     getDoc(ref).then((snap) => {
+      if (cancelled) return
       if (!snap.exists()) {
         const local = readLocalRaw<T>(key)
         if (local === null) return
@@ -109,7 +118,7 @@ export function useSyncedStorage<T>(
       }
     }).catch(() => { /* Firestore unavailable; stay on localStorage */ })
 
-    const unsub = onSnapshot(
+    unsub = onSnapshot(
       ref,
       (snap) => {
         if (!snap.exists()) return
@@ -172,9 +181,13 @@ export function useSyncedStorage<T>(
            here, and an uncaught error would take the page down. */
       },
     )
+    })().catch(() => {
+      /* SDK unavailable — keep working from localStorage */
+    })
 
     return () => {
-      unsub()
+      cancelled = true
+      unsub?.()
       // Release the in-flight barrier. A write that was still in flight when
       // the listener was torn down would otherwise never echo back, and the
       // barrier would block every remote update for the rest of the session.

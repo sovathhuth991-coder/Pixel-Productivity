@@ -137,6 +137,33 @@ export function isWeeklySaveWindowOpen(now: Date = new Date()): boolean {
   return cur >= (h * 60 + m)
 }
 
+/**
+ * The first moment the configured save window opened for a given report week.
+ *
+ * A week runs Sunday..Saturday, so its save window is the configured weekday
+ * *after* that Saturday (Sunday 22:00 by default). This is what lets the
+ * reminder catch up on Monday morning if the app was closed when the window
+ * opened — the old scheduler only asked "is the window open right now?" and
+ * then slept until the next week.
+ */
+export function getSaveWindowStart(
+  weekDates: Date[],
+  settings: WeeklyReportSettings = getReportSettings(),
+): Date {
+  const end = weekDates[weekDates.length - 1]
+  const [h, m] = settings.weeklySaveTime.split(':').map(Number)
+  const candidate = new Date(end.getFullYear(), end.getMonth(), end.getDate() + 1)
+  for (let i = 0; i < 7; i++) {
+    if (candidate.getDay() === settings.weeklySaveDay) {
+      candidate.setHours(h, m, 0, 0)
+      return candidate
+    }
+    candidate.setDate(candidate.getDate() + 1)
+  }
+  candidate.setHours(h, m, 0, 0)
+  return candidate
+}
+
 // ─── Buffer API ───────────────────────────────────────────────────────────
 function bufferKey(dateStr: string): string {
   return `${BUFFER_PREFIX}${dateStr}`

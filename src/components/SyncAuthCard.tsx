@@ -15,6 +15,7 @@ export default function SyncAuthCard() {
     signInEmail,
     createAccount,
     signOut,
+    signOutAndClearDevice,
     migrateLocalToCloud,
   } = useSyncContext()
   const { showToast } = useToast()
@@ -22,6 +23,7 @@ export default function SyncAuthCard() {
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [isCreate, setIsCreate] = useState(false)
+  const [confirmClearDevice, setConfirmClearDevice] = useState(false)
 
   const handleGoogle = async () => {
     setLoading(true)
@@ -59,6 +61,16 @@ export default function SyncAuthCard() {
       showToast('Local data pushed to the cloud ☁️', 'success')
     } catch {
       showToast('Migration failed — working offline', 'error')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleSignOutAndClear = async () => {
+    setLoading(true)
+    try {
+      await signOutAndClearDevice()
+      // The helper reloads the page, so success never returns here.
     } finally {
       setLoading(false)
     }
@@ -124,7 +136,7 @@ export default function SyncAuthCard() {
           Signed in as {user.email || user.uid.slice(0, 8)} • tasks sync live
           across devices
         </p>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <ActionButton
             onClick={handleMigrate}
             loading={loading}
@@ -133,10 +145,36 @@ export default function SyncAuthCard() {
           >
             Upload local data now
           </ActionButton>
-          <button onClick={() => signOut()} className="retro-btn font-pixel text-caption px-2 py-1">
+          <button
+            onClick={() => {
+              setConfirmClearDevice(false)
+              void signOut()
+            }}
+            className="retro-btn font-pixel text-caption px-2 py-1"
+          >
             Sign out
           </button>
+          <ActionButton
+            onClick={() => {
+              if (!confirmClearDevice) {
+                setConfirmClearDevice(true)
+                return
+              }
+              void handleSignOutAndClear()
+            }}
+            loading={loading && confirmClearDevice}
+            loadingLabel="CLEARING…"
+            className="retro-btn font-pixel text-caption px-2 py-1 border-danger text-danger"
+          >
+            {confirmClearDevice ? 'SURE? CLEAR THIS DEVICE' : 'SIGN OUT & CLEAR DEVICE'}
+          </ActionButton>
         </div>
+        {confirmClearDevice && (
+          <p className="font-pixel text-micro text-warn leading-relaxed">
+            The cloud copy is kept. This browser forgets its tasks, bookmarks,
+            history and the active timer. Sign in again to download them.
+          </p>
+        )}
       </div>
     )
   }
@@ -149,7 +187,8 @@ export default function SyncAuthCard() {
       </h3>
       <p className="font-pixel text-caption text-muted">
         Sign in on every device with the same account to keep tasks in sync.
-        Local data is migrated to the cloud on first sign-in.
+        Local data is migrated to the cloud on the first sign-in. Signing in
+        with a different account clears this browser&apos;s local copy first.
       </p>
 
       <ActionButton

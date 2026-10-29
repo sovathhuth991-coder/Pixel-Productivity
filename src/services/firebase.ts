@@ -1,24 +1,19 @@
-// Firebase client bootstrap.
+// Firebase client bootstrap — lazily loaded.
 //
-// This app ships with a *safe* config: if no real API key is present in the
-// environment, `isFirebaseConfigured()` returns false and every sync feature
-// silently deactivates — the app behaves exactly as before (localStorage only).
-// Flip in a real Web App config (from Firebase console > Project settings)
-// and the cloud features come alive.
+// This module deliberately contains no static `firebase/*` runtime imports.
+// The shell imports `SyncProvider`, which imports this file, so a static
+// import here would put ~150 KB of Auth + Firestore in the first paint for
+// every visitor — including the local-only ones who never sign in. The SDK
+// is fetched by `loadFirebase()` only when a real config is present.
+//
+// The safe gate is unchanged: with no real API key in the environment,
+// `isFirebaseConfigured()` returns false and the app behaves exactly as
+// before (localStorage only).
 
-import { initializeApp, getApps, type FirebaseApp } from 'firebase/app'
-import {
-  getAuth,
-  GoogleAuthProvider,
-  signInWithPopup,
-  signInWithEmailAndPassword,
-  createUserWithEmailAndPassword,
-  signOut,
-  onAuthStateChanged,
-  type Auth,
-  type User,
-} from 'firebase/auth'
-import { getFirestore, type Firestore } from 'firebase/firestore'
+import type { FirebaseApp } from 'firebase/app'
+import type { Auth, User } from 'firebase/auth'
+import type { Firestore } from 'firebase/firestore'
+import { firestoreApi } from './cloud'
 
 export interface FirebaseConfigShape {
   apiKey: string
@@ -40,11 +35,6 @@ export const firebaseConfig: FirebaseConfigShape = {
   measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID ?? 'G-J1Y8Z38HMC',
 }
 
-let app: FirebaseApp | null = null
-let authInstance: Auth | null = null
-let dbInstance: Firestore | null = null
-let initError: Error | null = null
-
 export function isFirebaseConfigured(): boolean {
   // The app runs ungated (localStorage-only) until a real Web App API key is
   // provided in VITE_FIREBASE_API_KEY. Real Firebase web API keys start with
@@ -53,28 +43,59 @@ export function isFirebaseConfigured(): boolean {
   return key.startsWith('AIzaSy') && key.length >= 39
 }
 
-export function getFirebase(): {
-  app: FirebaseApp | null
-  auth: Auth | null
-  db: Firestore | null
-  error: Error | null
-} {
-  if (app) return { app, auth: authInstance, db: dbInstance, error: null }
-  if (typeof window === 'undefined') return { app: null, auth: null, db: null, error: null }
-  try {
-    app = getApps()[0] || initializeApp(firebaseConfig)
-    if (!authInstance) authInstance = getAuth(app)
-    if (!dbInstance) dbInstance = getFirestore(app)
-  } catch (e) {
-    initError = e as Error
-    app = null
-    authInstance = null
-    dbInstance = null
+export interface FirebaseRuntime {
+  app: FirebaseApp
+  auth: Auth
+  db: Firestore
+}
+
+let runtimePromise: Promise<FirebaseRuntime> | null = null
+
+/**
+ * Load and initialize the SDK once.
+ *
+ * Rejects when no real config is present, so callers never accidentally
+ * initialize Firebase against a placeholder key.
+ */
+export function loadFirebase(): Promise<FirebaseRuntime> {
+  if (!isFirebaseConfigured()) {
+    return Promise.reject(new Error('Firebase is not configured'))
   }
-  return { app, auth: authInstance, db: dbInstance, error: initError }
+  if (!runtimePromise) {
+    runtimePromise = Promise.all([
+      import('firebase/app'),
+      import('firebase/auth'),
+      firestoreApi(),
+    ])
+      .then(([appApi, authApi, firestore]) => {
+        const app = appApi.getApps()[0] || appApi.initializeApp(firebaseConfig)
+        return {
+          app,
+          auth: authApi.getAuth(app),
+          db: firestore.getFirestore(app),
+        }
+      })
+      .catch((error) => {
+        // A transient chunk/network failure must be retryable on the next
+        // sign-in attempt rather than cached forever.
+        runtimePromise = null
+        throw error
+      })
+  }
+  return runtimePromise
+}
+
+/** Subscribe to auth state, loading the auth SDK only when needed. */
+export async function subscribeAuth(
+  auth: Auth,
+  cb: (user: User | null) => void,
+): Promise<() => void> {
+  const { onAuthStateChanged } = await import('firebase/auth')
+  return onAuthStateChanged(auth, cb)
 }
 
 export async function signInWithGoogle(auth: Auth): Promise<User> {
+  const { GoogleAuthProvider, signInWithPopup } = await import('firebase/auth')
   const provider = new GoogleAuthProvider()
   // Restrict to selectable accounts so a shared account always picks the right one.
   provider.setCustomParameters({ prompt: 'select_account' })
@@ -87,6 +108,7 @@ export async function signInWithEmail(
   email: string,
   password: string,
 ): Promise<User> {
+  const { signInWithEmailAndPassword } = await import('firebase/auth')
   const res = await signInWithEmailAndPassword(auth, email, password)
   return res.user
 }
@@ -96,15 +118,11 @@ export async function createAccount(
   email: string,
   password: string,
 ): Promise<User> {
+  const { createUserWithEmailAndPassword } = await import('firebase/auth')
   const res = await createUserWithEmailAndPassword(auth, email, password)
   return res.user
 }
 
 export function signOutUser(auth: Auth): Promise<void> {
-  return signOut(auth)
-}
-
-export type AuthUnsubscribe = () => void
-export function onAuthChange(auth: Auth, cb: (user: User | null) => void): AuthUnsubscribe {
-  return onAuthStateChanged(auth, cb)
+  return import('firebase/auth').then(({ signOut }) => signOut(auth))
 }

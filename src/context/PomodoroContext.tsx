@@ -5,6 +5,11 @@ import { playBeep, playComplete, isAudioMuted, toggleAudioMuted } from '../utils
 import { sendBrowserNotification, requestNotificationPermission } from '../utils/notifications'
 import { autoLogSession, logTaskCompletion, type PomodoroSaleToObsidian, type TaskLogEntry } from '../utils/obsidian-sync'
 import { recordPomodoroFinished, recordPomodoroSession } from '../utils/weekly-report'
+import {
+  readStoredSession,
+  writeStoredSession,
+  type StoredPomodoroSession,
+} from '../utils/pomodoro-session'
 
 export type TimerMode = 'work' | 'shortBreak' | 'longBreak'
 
@@ -126,24 +131,41 @@ function getDurationSeconds(mode: TimerMode, settings: PomodoroSettings): number
 export function PomodoroProvider({ children }: { children: ReactNode }) {
   const { incrementPomodoro, toggleTask, getCategory } = useTaskContext()
 
+  // Hydrate once, before the first render. A session that was running when
+  // the tab closed is rebuilt from its wall-clock end time; one that ended
+  // while the app was away restores as `timeLeft: 0, isRunning: true`, so
+  // the completion effect below fires exactly once on mount.
+  const [restored] = useState<StoredPomodoroSession | null>(() => readStoredSession())
+
   const [settings, setSettings] = useState<PomodoroSettings>(getStoredSettings)
   const [obsidianSettings, setObsidianSettings] = useState<ObsidianSettings>(getStoredObsidianSettings)
 
-  const [mode, setModeState] = useState<TimerMode>('work')
-  const [timeLeft, setTimeLeft] = useState<number>(() => getDurationSeconds('work', settings))
-  const [isRunning, setIsRunning] = useState(false)
-  const [sessionsCompleted, setSessionsCompleted] = useState(0)
-  const [totalSessions, setTotalSessions] = useState(0)
-  const [activeTask, setActiveTask] = useState<ActiveTaskInfo | null>(null)
+  const [mode, setModeState] = useState<TimerMode>(() => restored?.mode ?? 'work')
+  const [timeLeft, setTimeLeft] = useState<number>(() => {
+    if (!restored) return getDurationSeconds('work', settings)
+    if (restored.isRunning && restored.endAt != null) {
+      return Math.max(0, Math.ceil((restored.endAt - Date.now()) / 1000))
+    }
+    return restored.remaining
+  })
+  const [isRunning, setIsRunning] = useState<boolean>(() => {
+    if (!restored?.isRunning) return false
+    return restored.endAt != null
+  })
+  const [sessionsCompleted, setSessionsCompleted] = useState(() => restored?.sessionsCompleted ?? 0)
+  const [totalSessions, setTotalSessions] = useState(() => restored?.totalSessions ?? 0)
+  const [activeTask, setActiveTask] = useState<ActiveTaskInfo | null>(() => restored?.activeTask ?? null)
   const [showCompletePrompt, setShowCompletePrompt] = useState(false)
   const [completedTaskCandidate, setCompletedTaskCandidate] = useState<ActiveTaskInfo | null>(null)
   const [isMuted, setIsMutedState] = useState(isAudioMuted())
 
   // Keep references for interval callback
-  const sessionStartRef = useRef<Date | null>(null)
+  const sessionStartRef = useRef<Date | null>(
+    restored?.startedAt ? new Date(restored.startedAt) : null,
+  )
   const lastTickRef = useRef<number>(Date.now())
   const activeTaskRef = useRef<ActiveTaskInfo | null>(activeTask)
-  const timerEndRef = useRef<number>(0)
+  const timerEndRef = useRef<number>(restored?.endAt ?? 0)
   const timeLeftRef = useRef<number>(0)
   lastTickRef.current = Date.now()
   timeLeftRef.current = timeLeft
@@ -187,13 +209,40 @@ export function PomodoroProvider({ children }: { children: ReactNode }) {
     setTimeLeft(getDurationSeconds(mode, DEFAULT_POMODORO_SETTINGS))
   }, [mode])
 
-  // Sync timeLeft when idle if settings change duration for current mode
+  // Keep the idle timer in sync with duration / mode changes — but only when
+  // one of those actually changed. The old effect also ran on every pause,
+  // because `isRunning` was a dependency, so pausing reset the countdown to
+  // the full duration instead of freezing it.
+  const prevModeRef = useRef<TimerMode>(mode)
+  const prevDurationsRef = useRef({
+    work: settings.workDuration,
+    short: settings.shortBreakDuration,
+    long: settings.longBreakDuration,
+  })
   useEffect(() => {
-    if (!isRunning) {
-      const targetDuration = getDurationSeconds(mode, settings)
-      setTimeLeft(targetDuration)
+    const prev = prevDurationsRef.current
+    const durationsChanged =
+      prev.work !== settings.workDuration ||
+      prev.short !== settings.shortBreakDuration ||
+      prev.long !== settings.longBreakDuration
+    const modeChanged = prevModeRef.current !== mode
+    prevModeRef.current = mode
+    prevDurationsRef.current = {
+      work: settings.workDuration,
+      short: settings.shortBreakDuration,
+      long: settings.longBreakDuration,
     }
-  }, [settings.workDuration, settings.shortBreakDuration, settings.longBreakDuration, mode, isRunning])
+    if (!isRunning && (durationsChanged || modeChanged)) {
+      setTimeLeft(getDurationSeconds(mode, settings))
+    }
+  }, [
+    settings.workDuration,
+    settings.shortBreakDuration,
+    settings.longBreakDuration,
+    mode,
+    isRunning,
+    settings,
+  ])
 
   const toggleMute = useCallback(() => {
     const next = toggleAudioMuted()
@@ -204,12 +253,22 @@ export function PomodoroProvider({ children }: { children: ReactNode }) {
     setModeState(newMode)
     setTimeLeft(getDurationSeconds(newMode, settingsRef.current))
     setIsRunning(false)
+    timerEndRef.current = 0
+    sessionStartRef.current = null
   }, [])
 
   const handleStart = useCallback(() => {
     if (!isRunning) {
       requestNotificationPermission()
-      sessionStartRef.current = new Date()
+      // Starting from a finished/zero state (including a session that ended
+      // while the tab was closed) begins a fresh interval instead of
+      // completing instantly.
+      if (timeLeftRef.current <= 0) {
+        const duration = getDurationSeconds(mode, settingsRef.current)
+        timeLeftRef.current = duration
+        setTimeLeft(duration)
+      }
+      if (!sessionStartRef.current) sessionStartRef.current = new Date()
       // Seed a wall-clock end time so the interval can count down exactly
       // one second per second (no drift / skipped ticks).
       timerEndRef.current = Date.now() + timeLeftRef.current * 1000
@@ -217,15 +276,20 @@ export function PomodoroProvider({ children }: { children: ReactNode }) {
       setIsRunning(true)
       playBeep()
     }
-  }, [isRunning])
+  }, [isRunning, mode])
 
   const handlePause = useCallback(() => {
+    // Freeze the exact remaining time rather than relying on the interval's
+    // last render — a pause between ticks would otherwise jump back a second.
+    const remaining = Math.max(0, Math.ceil((timerEndRef.current - Date.now()) / 1000))
+    setTimeLeft(remaining)
     setIsRunning(false)
   }, [])
 
   const handleReset = useCallback(() => {
     setIsRunning(false)
     sessionStartRef.current = null
+    timerEndRef.current = 0
     setTimeLeft(getDurationSeconds(mode, settingsRef.current))
   }, [mode])
 
@@ -237,6 +301,48 @@ export function PomodoroProvider({ children }: { children: ReactNode }) {
       switchMode('work')
     }
   }, [mode, switchMode])
+
+  // ─── Persist the live session ──────────────────────────────────────
+  // Rebuilt every render so the pagehide handler always sees the latest
+  // values without tearing down and re-adding a listener every second.
+  const sessionSnapshotRef = useRef<StoredPomodoroSession | null>(null)
+  sessionSnapshotRef.current = {
+    version: 1,
+    mode,
+    isRunning,
+    endAt: isRunning ? timerEndRef.current || null : null,
+    remaining: isRunning
+      ? Math.max(0, Math.ceil((timerEndRef.current - Date.now()) / 1000))
+      : timeLeft,
+    startedAt: sessionStartRef.current ? sessionStartRef.current.getTime() : null,
+    activeTask,
+    sessionsCompleted,
+    totalSessions,
+    savedAt: Date.now(),
+  }
+
+  const lastPersistRef = useRef(0)
+  useEffect(() => {
+    const now = Date.now()
+    // Write immediately on a transition; while running, once every five
+    // seconds is enough because the end time — not the tick count — is the
+    // source of truth.
+    const force = !isRunning || now - lastPersistRef.current > 5000
+    if (!force) return
+    lastPersistRef.current = now
+    if (sessionSnapshotRef.current) writeStoredSession(sessionSnapshotRef.current)
+  }, [mode, isRunning, timeLeft, activeTask, sessionsCompleted, totalSessions])
+
+  useEffect(() => {
+    const persist = () => {
+      if (sessionSnapshotRef.current) writeStoredSession(sessionSnapshotRef.current)
+    }
+    window.addEventListener('pagehide', persist)
+    return () => {
+      window.removeEventListener('pagehide', persist)
+      persist()
+    }
+  }, [])
 
   // Background timer interval
   useEffect(() => {
@@ -374,7 +480,10 @@ export function PomodoroProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const currentDurationTotal = getDurationSeconds(mode, settings)
-  const progress = currentDurationTotal > 0 ? 1 - timeLeft / currentDurationTotal : 0
+  const progress =
+    currentDurationTotal > 0
+      ? Math.min(1, Math.max(0, 1 - timeLeft / currentDurationTotal))
+      : 0
 
   return (
     <PomodoroContext.Provider

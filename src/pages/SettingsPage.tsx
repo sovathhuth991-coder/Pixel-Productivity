@@ -1,5 +1,4 @@
 import { useState, useRef } from 'react'
-import { useTaskContext } from '../context/TaskContext'
 import { usePomodoroContext } from '../context/PomodoroContext'
 import { useToast } from '../components/ui/Toast'
 import { playBeep, playComplete, playModeSwitch, playClick, isAudioMuted, toggleAudioMuted } from '../utils/audio'
@@ -9,23 +8,11 @@ import PixelIcon from '../components/ui/PixelIcon'
 import PixelEmoji from '../components/ui/PixelEmoji'
 import ActionButton from '../components/ui/ActionButton'
 import SyncAuthCard from '../components/SyncAuthCard'
-import { useSyncContext } from '../context/SyncContext'
+import { useSyncContext, LAST_UID_KEY } from '../context/SyncContext'
 import { SYNC_KEYS } from '../services/syncKeys'
-import { readBuffer, readPomodoroHistory } from '../utils/weekly-report'
-import type { ActivityItem, Bookmark, Folder } from '../types/tasks'
-
-/** Read a JSON value out of localStorage without throwing on a corrupt blob. */
-function readLocalJson<T>(key: string, fallback: T): T {
-  try {
-    const raw = localStorage.getItem(key)
-    return raw ? (JSON.parse(raw) as T) : fallback
-  } catch {
-    return fallback
-  }
-}
+import { downloadBackup } from '../utils/backup'
 
 export default function SettingsPage() {
-  const { data, streak } = useTaskContext()
   const {
     settings,
     updateSettings,
@@ -111,30 +98,9 @@ export default function SettingsPage() {
 
   const handleExport = () => {
     try {
-      const exportData = {
-        data,
-        streak,
-        settings,
-        obsidianSettings,
-        // The rest of what the app keeps. A backup that only held the task
-        // list would lose the bookmarks and the week's activity history —
-        // and that history is the source the weekly .md is generated from.
-        activity: readLocalJson<ActivityItem[]>('taskmanager_activity', []),
-        completionHistory: readLocalJson<Record<string, number>>('taskmanager_completion_history', {}),
-        bookmarks: readLocalJson<Bookmark[]>('pixel_bookmarks', []),
-        bookmarkFolders: readLocalJson<Folder[]>('pixel_bookmark_folders', []),
-        reportBuffer: readBuffer(),
-        pomodoroHistory: readPomodoroHistory(),
-        exportedAt: new Date().toISOString(),
-        version: '1.2',
-      }
-      const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' })
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = `pixel-productivity-backup-${new Date().toISOString().slice(0, 10)}.json`
-      a.click()
-      URL.revokeObjectURL(url)
+      // Shared with the crash boundary, so an emergency export is the same
+      // file as a normal one.
+      downloadBackup()
       showToast('Data exported successfully!', 'success')
     } catch {
       showToast('Failed to export data', 'error')
@@ -223,11 +189,13 @@ export default function SettingsPage() {
     // Purely local prefs (themes, settings, device-specific paths).
     const localKeys = [
       'pixel_pomodoro_settings',
+      'pixel_pomodoro_session',
       'pixel_obsidian_settings',
       'taskmanager_resets',
       'design-mode',
       'pixel_animations_enabled',
       'pixel_weekly_report_last_saved',
+      LAST_UID_KEY,
     ]
     setClearing(true)
     try {
