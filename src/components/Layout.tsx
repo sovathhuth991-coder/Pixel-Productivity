@@ -28,15 +28,15 @@ export default function Layout() {
   // 75px-wide target, well above the 44px minimum, and they stay legible at
   // the tiny pixel font this app uses.
   const mobileNavItems: { to: string; label: string; icon: PixelIconName; end?: boolean }[] = [
+    { to: '/home', label: 'HOME', icon: 'home' },
     { to: '/', label: 'TASKS', icon: 'clipboard', end: true },
-    { to: '/board', label: 'BOARD', icon: 'board' },
     { to: '/pomodoro', label: 'FOCUS', icon: 'tomato' },
     { to: '/stats', label: 'STATS', icon: 'chart' },
   ]
 
   // Routes that are reachable from the MORE sheet — MORE stays highlighted
   // while any of them is open.
-  const moreRoutes = ['/bookmarks', '/weekly', '/settings']
+  const moreRoutes = ['/board', '/bookmarks', '/weekly', '/settings']
   const isMoreRoute = moreRoutes.some(r => location.pathname.startsWith(r))
 
   return (

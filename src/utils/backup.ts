@@ -16,6 +16,7 @@ export interface BackupFile {
   bookmarkFolders: unknown
   reportBuffer: ReportBuffer
   pomodoroHistory: Record<string, number>
+  wallpaperSettings?: unknown
   exportedAt: string
   version: string
 }
@@ -41,6 +42,7 @@ export function collectBackup(): BackupFile {
     bookmarkFolders: readJson('pixel_bookmark_folders', []),
     reportBuffer: readBuffer(),
     pomodoroHistory: readPomodoroHistory(),
+    wallpaperSettings: readJson('pixel_wallpaper_settings', null),
     exportedAt: new Date().toISOString(),
     version: '1.2',
   }

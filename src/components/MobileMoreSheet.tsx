@@ -29,6 +29,7 @@ interface MoreLink {
 }
 
 const moreLinks: MoreLink[] = [
+  { to: '/board', label: 'KANBAN BOARD', hint: 'TODO / DOING / DONE', icon: 'board' },
   {
     to: '/bookmarks',
     label: 'TABS & BOOKMARKS',

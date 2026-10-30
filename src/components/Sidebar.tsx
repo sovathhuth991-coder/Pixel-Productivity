@@ -23,6 +23,7 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
   const timeFormatted = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
 
   const navItems: { to: string; label: string; icon: PixelIconName; end?: boolean }[] = [
+    { to: '/home', label: 'HOME', icon: 'home' },
     { to: '/', label: 'TASKS', icon: 'clipboard', end: true },
     { to: '/board', label: 'BOARD', icon: 'board' },
     { to: '/bookmarks', label: 'BOOKMARKS', icon: 'bookmark' },

@@ -106,6 +106,10 @@ export function KeyboardShortcutsProvider({ children }: { children: React.ReactN
 
       // Navigation shortcuts
       switch (e.code) {
+        case 'KeyH':
+          e.preventDefault()
+          if (location.pathname !== '/home') navigate('/home', { replace: true })
+          return
         case 'Digit1':
           e.preventDefault()
           if (location.pathname !== '/') navigate('/', { replace: true })

@@ -841,3 +841,17 @@ html.mode-commander textarea {
   background: var(--accent-2);
 }
 
+/* Wallpaper scenes are decorative; the app's "stop animations" preference and
+   the OS reduced-motion setting must be able to freeze them. */
+.stop-animations .wallpaper-scene,
+.stop-animations .wallpaper-scene * {
+  animation: none !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wallpaper-scene,
+  .wallpaper-scene * {
+    animation: none !important;
+  }
+}
+

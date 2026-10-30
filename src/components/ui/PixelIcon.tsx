@@ -40,6 +40,7 @@ export type PixelIconName =
   | 'kanban'
   | 'bookmark'
   | 'externalLink'
+  | 'home'
   | 'menu'
 
 interface IconDefinition {
@@ -95,8 +96,33 @@ const ICONS: Record<string, IconDefinition> = {
     ],
   },
 
-
-
+  home: {
+    palette: {
+      K: '$ink',
+      L: '#b53823',
+      D: '#7c2d1a',
+      W: '#f6f1e7',
+      Y: '#f5c542',
+    },
+    grid: [
+      '                ',
+      '       KK       ',
+      '      KLLK      ',
+      '     KLLLLK     ',
+      '    KLLLLLLK    ',
+      '   KLLLLLLLLK   ',
+      '  KLLLLLLLLLLK  ',
+      ' KKKKKKKKKKKKKK ',
+      ' KLLLLLLLLLLLLK ',
+      ' KLLKKLLLLKKLLK ',
+      ' KLLKKLLLLKKLLK ',
+      ' KLLLLLLLLLLLLK ',
+      ' KLLLLKKKKLLLLK ',
+      ' KLLLLKYYKLLLLK ',
+      ' KKKKKKYYKKKKKK ',
+      '                ',
+    ],
+  },
 
   chart: {
     palette: {

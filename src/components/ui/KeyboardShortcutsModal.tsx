@@ -11,6 +11,7 @@ const SHORTCUTS = [
   { key: 'R', desc: 'Reset Active Timer Interval', section: 'Timer' },
   { key: 'S or →', desc: 'Skip Current Interval', section: 'Timer' },
   { key: 'N', desc: 'Create New Task', section: 'Navigation' },
+  { key: 'H', desc: 'Go to Home / Wallpaper Screen', section: 'Navigation' },
   { key: '1', desc: 'Go to Tasks Dashboard', section: 'Navigation' },
   { key: '2', desc: 'Go to Kanban Board', section: 'Navigation' },
   { key: '3', desc: 'Go to Bookmarks / Tabs', section: 'Navigation' },
