@@ -63,9 +63,13 @@ export default function SettingsPage() {
     setTestingObsidian(true)
     try {
       const url = (obsidianSettings.gatewayUrl || 'http://localhost:5789').replace(/\/$/, '')
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+      if (obsidianSettings.gatewayToken) {
+        headers['X-Pixel-Gateway-Token'] = obsidianSettings.gatewayToken
+      }
       const res = await fetch(`${url}/pomodoro/session`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({
           taskId: 'test',
           taskTitle: 'Connection Test',
@@ -161,6 +165,9 @@ export default function SettingsPage() {
           }
           if (parsed.pomodoroHistory) {
             setStoredValue('pixel_pomodoro_daily', parsed.pomodoroHistory)
+          }
+          if (parsed.wallpaperSettings) {
+            localStorage.setItem('pixel_wallpaper_settings', JSON.stringify(parsed.wallpaperSettings))
           }
           showToast('Data restored! Reloading...', 'success')
           setTimeout(() => window.location.reload(), 800)
@@ -424,6 +431,20 @@ export default function SettingsPage() {
                   placeholder="http://localhost:5789"
                   value={obsidianSettings.gatewayUrl}
                   onChange={(e) => updateObsidianSettings({ gatewayUrl: e.target.value })}
+                  className="w-full bg-app-deep border-2 border-line focus:border-accent p-2 text-ink font-pixel text-caption outline-none"
+                />
+              </div>
+
+              <div className="flex-1">
+                <label htmlFor="gateway-token" className="block font-pixel text-label text-muted mb-1">
+                  GATEWAY TOKEN:
+                </label>
+                <input
+                  id="gateway-token"
+                  type="password"
+                  placeholder="shared secret from the gateway"
+                  value={obsidianSettings.gatewayToken}
+                  onChange={(e) => updateObsidianSettings({ gatewayToken: e.target.value })}
                   className="w-full bg-app-deep border-2 border-line focus:border-accent p-2 text-ink font-pixel text-caption outline-none"
                 />
               </div>

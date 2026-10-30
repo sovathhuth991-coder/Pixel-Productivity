@@ -1,151 +1,171 @@
-# Security runbook
+# Security
 
-This is a **personal, single-owner** deployment. It is not designed for public
-sign-up or multi-tenant use.
+How this app is protected, what is actually left to you, and what to do in
+the Firebase console.
 
-## What is public (and what is not)
+## The short version
 
-- `https://dpomodoro-f7b6c.web.app` and its login screen are public.
-- The Firebase project ID and web API key are embedded in the client bundle.
-  That is normal: a Firebase web API key identifies the project, it does not
-  grant access. Firestore rules are the access control.
-- Your Gmail password is never sent to this app. Google Sign-In uses OAuth; the
-  app receives only an ID token with basic profile/email claims.
-- Your tasks, bookmarks and history stay behind Firebase Auth + Firestore rules.
-- Local browser storage is **not encrypted**. Anyone who can open your unlocked
-  browser profile can read it, so use full-disk encryption and the
-  **Sign out & clear device** button on shared machines.
+**Your task data is not reachable by anyone who finds the URL.** The Firestore
+rules do not trust "signed in" — they require the account to also have a
+document in a console-only `/owners` collection. A stranger who signs in with
+their own Google account gets an empty app and cannot read or write a single
+byte of yours.
 
-## One-time setup: lock Firestore to your account
+**Your Gmail address is never exposed to the app.** The app only offers
+"Continue with Google" (a Firebase popup). There is no password field
+anywhere in the codebase, so there is no password for a phisher to steal and
+no credential to leak from a breach of this app.
 
-The rules in `firestore.rules` require **both** a matching Firebase UID and a
-document at `owners/{uid}`. A random Google account that signs in cannot read
-or write your data.
+**The API key in `.env` is not a secret.** Firebase Web API keys ship inside
+the JavaScript bundle by design — anyone who opens the app can read it. The
+key is not what protects your data; the rules are. What an unrestricted key
+*does* let a stranger do is use your Firebase project (create accounts, burn
+quota), which is what App Check and API key restrictions close.
 
-1. Find your UID in the Firebase console → **Authentication → Users** (copy
-   the User UID). If the new Settings screen is already deployed, the same ID
-   is shown under **Settings → Cloud Sync → ACCOUNT ID**.
+## Already in place
 
-2. In the Firebase console → **Firestore Database** → **Start collection**:
-   - Collection ID: `owners`
-   - Document ID: paste your UID
-   - Field: `enabled` (boolean) = `true`
-   - Save.
+| Control | Where |
+|---|---|
+| Owner allowlist — a UID needs a `/owners/{uid}` document to read or write anything | `firestore.rules` |
+| `/owners` is console-only (`allow read, write: if false`) | `firestore.rules` |
+| Write key allowlist — only 9 known keys can be written | `firestore.rules` |
+| Envelope validation — only `{value, updatedAt, nonce}`, `updatedAt` must be a timestamp | `firestore.rules` |
+| Google sign-in only, no password path | `src/services/firebase.ts` |
+| Strict CSP: `default-src 'self'`, `object-src 'none'`, `base-uri 'self'`, `frame-ancestors 'none'`, no `unsafe-eval` | `firebase.json` |
+| HSTS (preload), `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy`, `Permissions-Policy` (camera/mic/geo/payment off), `Cross-Origin-Opener-Policy` | `firebase.json` |
+| `X-Robots-Tag: noindex, nofollow` — search engines will not index the site | `firebase.json` |
+| Bookmark URLs restricted to http/https; `javascript:` and `data:` rejected; credentials stripped from stored URLs | `src/utils/url.ts` |
+| Vault folder handle never destroyed by a failed permission check | `src/utils/obsidian-archive.ts` |
+| App shell is not painted with another account's cached data | `src/components/SyncGate.tsx` |
+| `.env` is gitignored | `.gitignore` |
 
-3. Deploy hosting + rules:
+## What you still have to do in the console
 
-   ```bash
-   npm run deploy
-   ```
+These cannot be done from code. Each one is a few clicks.
 
-4. Reload the app and confirm sync works. Create the owner document **before**
-   deploying the rules, or Firestore will deny reads/writes until it exists —
-   the app still works locally, but nothing syncs.
+### 1. Restrict the API key (do this first)
 
-To revoke a device/account later, delete its `owners/{uid}` document. To add a
-trusted second account, create a matching document for its UID.
+Google Cloud console → **APIs & Services → Credentials** → your *Browser API
+Key* → **Edit**:
 
-### If sync shows an error after deploying
+- **Application restrictions** → *HTTP referrers (web sites)* → add
+  `dpomodoro-f7b6c.web.app/*`, `https://dpomodoro-f7b6c.firebaseapp.com/*`,
+  and `http://localhost:3000/*` for local development.
+- **API restrictions** → *Restrict key* → add **Identity Toolkit API** (for
+  sign-in) and **Cloud Firestore API**. Remove the rest.
 
-That is almost always the missing `owners/{uid}` document. Create it in the
-console (console writes bypass the rules), then reload.
+With referrers restricted, a copy of your key used from another site is
+rejected by Google before it ever reaches your project.
 
-## Firebase console checklist
+### 2. Turn on App Check
 
-- **Authentication → Sign-in method**: enable Google only. Disable Email/Password.
-- **Authentication → Settings → User actions**: enable **Email enumeration
-  protection**.
-- **Authentication → Settings → Authorized domains**: keep only
-  `dpomodoro-f7b6c.web.app`, `dpomodoro-f7b6c.firebaseapp.com` and `localhost`
-  (for development).
-- **Firestore → Rules**: confirm the deployed rules match `firestore.rules`.
-  Use the Rules Playground to verify an unauthenticated read is denied.
-- **App Check** (optional but recommended): register the web app with
-  reCAPTCHA v3, then enforce it for Firestore once you see healthy traffic.
-- **Usage and billing**: set a budget alert so account/quota abuse cannot run
-  up a bill silently.
+App Check is what stops a *script* from using the project even with the key.
+The code support is already in `src/services/appCheck.ts` and is inert until
+a site key is present.
 
-## Google Cloud API key restrictions
+> **Before anything else:** `firebase/app-check` ships inside the `firebase`
+> package, but the subpath only exists after a *complete* install. If the
+> build fails with `Failed to resolve import "firebase/app-check"`, or
+> `npm run lint` reports `Cannot find module 'firebase/app-check'`, your
+> `node_modules` is incomplete — run `npm install` (ideally with the project
+> outside OneDrive; see below). The Vite config keeps the subpath external
+> when no site key is set, so the *build* survives either way, but the
+> type check does not.
 
-In Google Cloud Console → APIs & Services → Credentials → the browser key:
+1. Firebase console → **App Check** → register the web app → choose
+   **reCAPTCHA v3** → create the key → copy the **site key**.
+2. Put it in `.env`: `VITE_FIREBASE_APPCHECK_SITE_KEY=<site key>` (and in
+   `.env.example` as a placeholder).
+3. Deploy and confirm sign-in and sync still work.
+4. Only then, in App Check → **Enforce**.
 
-- **Application restrictions**: HTTP referrers, limited to
-  `https://dpomodoro-f7b6c.web.app/*` and
-  `https://dpomodoro-f7b6c.firebaseapp.com/*` (add `http://localhost:3000/*`
-  only while developing).
-- **API restrictions**: Identity Toolkit API, Cloud Firestore API, Token
-  Service API. Test Google sign-in after saving; an over-restricted key makes
-  Auth fail.
-- The API key is still not a secret. The restrictions reduce abuse from other
-  origins; they do not replace rules.
+For local development, App Check needs a debug token: run the app with
+`?appCheckDebugToken=<token>` in the URL, or set the token in localStorage as
+`firebase.appCheck.debugToken`, with the token printed by the App Check
+console.
 
-## Google account
+The existing CSP already allows reCAPTCHA v3 (`www.google.com` and
+`www.gstatic.com` are in `script-src`).
 
-This is the most important control, because it protects everything:
+### 3. Check the authorized domains
 
-- Enable 2-Step Verification or passkeys.
-- Review **Security → Third-party access** and remove apps you no longer use.
-- Use a unique password/passkey; never reuse the Gmail password elsewhere.
-- If you also created a Firebase email/password account with the same address,
-  remember Google 2FA does **not** protect that password. Prefer Google-only.
+Firebase console → **Authentication → Settings → Authorized domains**. It
+should contain only `dpomodoro-f7b6c.web.app`, `dpomodoro-f7b6c.firebaseapp.com`,
+and `localhost`. Remove anything else — this list is what stops a phishing
+site from opening a Google popup that looks like yours.
 
-## What the code already enforces
+### 4. Turn off the email/password provider
 
-- **Bookmark URLs**: only `http:`/`https:` are accepted on add, on backup
-  import, and again at render time. `javascript:`/`data:` URLs are rejected
-  (`src/utils/url.ts`).
-- **Rendering**: external links use `rel="noopener noreferrer"`; bookmark
-  text is rendered as text (React escaping), not HTML.
-- **No third-party bookmark metadata**: title lookups no longer send URLs to
-  Microlink, and favicons load from the bookmarked site rather than Google.
-- **Account switching**: signing in with a different account clears the local
-  cache before the app renders; sign-out-and-clear removes local data without
-  deleting the cloud copy.
-- **Hosting headers**: CSP (no inline script), HSTS, `X-Frame-Options: DENY`,
-  `X-Content-Type-Options: nosniff`, `Referrer-Policy`, `Permissions-Policy`,
-  `X-Robots-Tag: noindex`, and no-store for `index.html`.
-- **No source maps** in the production build.
-- **No secrets in Git**: `.env`, service-account JSON and key files are ignored;
-  the client only contains the public Firebase web config.
+The app only signs in with Google. In **Authentication → Sign-in method**,
+if *Email/Password* is enabled, **disable it**. An unused provider is an
+unused way in: with it on, anyone could register an account using your email
+address, and the app would then show "email already in use" when you tried to
+sign in with a password.
 
-## Dependency hygiene
+### 5. Confirm the owner document exists
 
-`npm audit` findings are mostly transitive packages inside Firebase's Node
-tooling (`undici`, `@grpc/grpc-js`); the browser does not execute those Node
-networking paths. Re-check after Firebase upgrades, and run:
+Firestore → the `owners` collection → a document whose ID is your account
+UID (`Settings → Cloud Sync → ACCOUNT ID → COPY`) with `enabled = true`.
+Without it, *nothing* syncs — that is the intended fail-closed behaviour,
+but it is worth checking that the sync is actually working.
 
-```bash
-npm audit --omit=dev
+### 6. The public GitHub repo reveals the URL
+
+`github.com/sovathhuth991-coder/Pixel-Productivity` is **public**, and it
+contains the project id, from which the `web.app` URL follows. The repo holds
+no secrets (`.env` is ignored and the tracked `.env.example` is a
+placeholder), but if you would rather the URL were not derivable, make the
+repository private or drop the live URL from the README.
+
+## Do not keep the checkout inside OneDrive
+
+This is the one environment issue that turned into real damage.
+
+OneDrive syncs `.git` and `node_modules` like any other folder, and it can
+drop files while it does. It has already happened here:
+
+- `.git` lost 16 blobs and 3 tree objects, so `git diff` and `git restore`
+  failed outright and a deleted tracked file could not be brought back.
+- `node_modules` is missing files: `@firebase/app-check` has only its
+  `package.json`, and `firebase/app-check/` is empty. Several other
+  `@firebase/*` packages are in the same state.
+
+A half-synced `node_modules` is the more dangerous of the two: the build can
+fail with a module that "does not exist" even though it is in `package.json`.
+
+**Move the project out of OneDrive** (a plain folder on `C:\` is fine), then:
+
+```
+rm -rf node_modules
+npm install
 ```
 
-Remove unused packages rather than leaving them in the dependency tree. Keep
-`package-lock.json` committed and review Dependabot PRs.
+`package-lock.json` is intact, so a clean install restores exactly the
+versions this project was built against. `node_modules/` and `.git/` should
+also be excluded from any further file-sync service.
 
-## What is not protected
+## The local Obsidian gateway
+The gateway (`http://localhost:5789` by default) is an HTTP server on your
+own machine that writes into your Obsidian vault. Two things to get right on
+*that* side — the app can only send the credential, it cannot enforce it:
 
-- A compromised **device** or malicious browser extension can read local
-  storage and the signed-in session. Sign out and clear the device if you lend
-  it.
-- A malicious **Firebase project collaborator** can change rules. Keep project
-  access to yourself and enable 2FA on the Google account.
-- A **phishing site** can imitate the login screen. Check the URL before
-  signing in; Google OAuth will show the app name and scopes.
-- Firestore data is encrypted at rest by Google, but it is not end-to-end
-  encrypted: Google and anyone with your account can read it. Do not store
-  secrets, recovery codes or passwords in tasks/bookmarks.
-- Backups are plaintext JSON. Store them in an encrypted archive, not in a
-  public cloud folder.
+1. **Bind to `127.0.0.1`, not `0.0.0.0`.** On `0.0.0.0` anyone on the same
+   Wi-Fi can reach it.
+2. **Require the shared secret.** The app sends it in the
+   `X-Pixel-Gateway-Token` header (paste it into *Settings → Obsidian
+   Integration → Gateway Token*). Without this, *any* website you visit can
+   POST to your gateway and write files into your vault — the page cannot
+   read the token out of this app, so the secret is what stops it.
+3. **Validate the `Origin` header** as well, for defence in depth.
 
-## Incident response
+The gateway URL is in the CSP's `connect-src` so the feature works from the
+deployed site. Note that `upgrade-insecure-requests` does not touch
+`localhost` (it is a potentially-trustworthy origin), so the plain `http://`
+call still works.
 
-If you suspect the account or project was accessed:
+## If you find a vulnerability
 
-1. Google Account → Security → sign out of all devices; change the password;
-   revoke third-party access.
-2. Firebase Console → Authentication → Users: remove unknown accounts.
-3. Firestore → Rules: re-check the rules and the `owners` documents.
-4. Firestore → Usage: look for unexpected reads/writes; check the billing alert.
-5. Export a backup from Settings, inspect it, then rotate any credentials that
-   were stored in task/bookmark text.
-6. If a service-account key was ever committed or shared, delete it in Google
-   Cloud and create a new one.
+This is a personal, single-account project, so there is no disclosure
+process to speak of. If something looks wrong, treat it as a bug: open an
+issue on the repository, or — since the repository is public and you own it —
+just fix it.

@@ -26,6 +26,14 @@ export interface ObsidianSettings {
   enabled: boolean
   vaultPath: string
   gatewayUrl: string
+  /**
+   * Shared secret the local gateway requires on every request.
+   *
+   * Without it the gateway is an open API that any website the user visits
+   * could POST to. Device-local: it lives in `pixel_obsidian_settings`,
+   * which is never synced.
+   */
+  gatewayToken: string
 }
 
 export const DEFAULT_POMODORO_SETTINGS: PomodoroSettings = {
@@ -41,6 +49,7 @@ export const DEFAULT_OBSIDIAN_SETTINGS: ObsidianSettings = {
   enabled: false,
   vaultPath: '',
   gatewayUrl: 'http://localhost:5789',
+  gatewayToken: '',
 }
 
 // Fallback exported object for backwards compatibility
@@ -406,7 +415,10 @@ export function PomodoroProvider({ children }: { children: ReactNode }) {
               finishedAt: now.toISOString(),
               duration: currentSettings.workDuration * 60,
             }
-            autoLogSession(session, currentObsidian.vaultPath, currentObsidian.gatewayUrl)
+            autoLogSession(session, currentObsidian.vaultPath, {
+              url: currentObsidian.gatewayUrl,
+              token: currentObsidian.gatewayToken,
+            })
             sendBrowserNotification('🍅 Focus Session Complete!', {
               body: `Finished session for "${currentTask.task.title}". Logged to Obsidian.`,
             })
@@ -466,7 +478,10 @@ export function PomodoroProvider({ children }: { children: ReactNode }) {
             completedAt: new Date().toISOString(),
             pomodoros: (task.pomodorosSpent || 0) + 1,
           }
-          logTaskCompletion(entry, currentObsidian.vaultPath, currentObsidian.gatewayUrl)
+          logTaskCompletion(entry, currentObsidian.vaultPath, {
+            url: currentObsidian.gatewayUrl,
+            token: currentObsidian.gatewayToken,
+          })
         }
       }
     }

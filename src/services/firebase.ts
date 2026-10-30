@@ -14,6 +14,7 @@ import type { FirebaseApp } from 'firebase/app'
 import type { Auth, User } from 'firebase/auth'
 import type { Firestore } from 'firebase/firestore'
 import { firestoreApi } from './cloud'
+import { initAppCheck } from './appCheck'
 
 export interface FirebaseConfigShape {
   apiKey: string
@@ -74,6 +75,14 @@ export function loadFirebase(): Promise<FirebaseRuntime> {
           auth: authApi.getAuth(app),
           db: firestore.getFirestore(app),
         }
+      })
+      .then((runtime) => {
+        // App Check attaches to the app and makes the backend require a token
+        // that only a genuine instance of this app can produce — without it,
+        // the public Web API key is enough to use the project from a script.
+        // It is opt-in (no site key = no-op) and never blocks startup.
+        void initAppCheck(runtime.app)
+        return runtime
       })
       .catch((error) => {
         // A transient chunk/network failure must be retryable on the next

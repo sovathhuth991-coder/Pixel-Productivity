@@ -1,6 +1,6 @@
 # Pixel-Productivity
 
-Pixel-art Pomodoro timer + daily task manager + Kanban + bookmarks, built with React + Vite and deployed to Firebase Hosting.
+Pixel-art Pomodoro timer + daily task manager + Kanban + bookmarks + an immersive wallpaper home screen, built with React + Vite and deployed to Firebase Hosting.
 
 ## Links
 - Live app: https://dpomodoro-f7b6c.web.app
@@ -21,6 +21,29 @@ one-off is `npx firebase-tools deploy --only hosting,firestore` (`npx firebase`
 resolves the wrong package name).
 
 The CLI needs a login once per machine: `npx firebase-tools login`.
+
+## Home screen (`/home`)
+A full-bleed "new tab" screen separate from the sidebar layout:
+
+- **Live wallpaper**: five CSS-only scenes (Cozy Rain, Starfield, Aurora,
+  Sunset, Forest), a custom image URL, or a looping mp4/webm video. A darkness
+  slider keeps the clock readable; the choice is stored in
+  `pixel_wallpaper_settings` on this device (not synced).
+- **Clock**: 12-hour VT323 clock with AM/PM, full date and a time-of-day
+  greeting.
+- **Focus**: the current Pomodoro is shown in the header and in a desktop card;
+  start/pause works without leaving the page.
+- **Music**: a floating audio deck with a YouTube lofi stream (default
+  `jfKfPfyJRdk`, embedded via `youtube-nocookie.com`) plus procedurally
+  synthesised rain, fire, wind and white noise (Web Audio; no audio files).
+- **Quick actions**: web search, task counts, and `← TASKS` / `BOARD` links.
+  The `H` shortcut and the HOME nav item (desktop sidebar + mobile bar) open it.
+- Wallpaper animations respect the app's "stop animations" preference and
+  `prefers-reduced-motion`; custom image/video URLs must be http(s).
+
+Because the music player is a third-party YouTube iframe, the production CSP
+allows `youtube.com` / `youtube-nocookie.com`; that is the only embedded media
+origin.
 
 ## Cloud sync (opt-in, non-breaking)
 A per-user key/value store in Firestore at `users/{uid}/kv/{key}`. The keys that
@@ -213,6 +236,10 @@ The one-time console setup and incident checklist are in
 
 ## Troubleshooting
 See the `pixel-productivity-sync-pwa` skill for sync / PWA-install / stale-data notes.
+
+For security (what is already protected, and the Firebase console steps that
+are not automatable — API key restrictions, App Check, authorised domains,
+and the local Obsidian gateway), see **[SECURITY.md](SECURITY.md)**.
 
 ### The git repository lives inside OneDrive
 OneDrive syncs `.git` like any other folder, and it can drop or corrupt the
